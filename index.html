@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>yellowHEAD playables</title>
+  <title>Playables</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Montserrat:wght@400;600&display=swap" rel="stylesheet">
@@ -12,84 +12,90 @@
       --yellow: #FFDD0C;
       --navy: #0A1428;
       --cloud: #FAFAFA;
-      --coral: #F88673;
-      --mint: #54F0A3;
       --card: #121c33;
       --line: rgba(250, 250, 250, 0.12);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      background: var(--navy);
+      background:
+        radial-gradient(900px 420px at 10% -10%, rgba(255, 221, 12, 0.08), transparent 60%),
+        var(--navy);
       color: var(--cloud);
       font-family: Montserrat, sans-serif;
       font-weight: 400;
       line-height: 1.5;
     }
-    header, main { width: min(1080px, calc(100% - 40px)); margin: 0 auto; }
-    header { padding: 48px 0 12px; }
+    header, main, footer { width: min(1080px, calc(100% - 48px)); margin: 0 auto; }
+    header { padding: 56px 0 8px; }
     .mark {
       font-family: "Bricolage Grotesque", sans-serif;
       font-weight: 800;
       letter-spacing: -0.03em;
-      font-size: 14px;
+      font-size: 13px;
       color: var(--yellow);
-      margin: 0 0 12px;
+      margin: 0 0 18px;
     }
     h1 {
       font-family: "Bricolage Grotesque", sans-serif;
       font-weight: 800;
-      font-size: clamp(36px, 5vw, 56px);
-      line-height: 1.05;
-      letter-spacing: -0.03em;
-      margin: 0 0 12px;
+      font-size: clamp(40px, 6vw, 64px);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+      margin: 0 0 16px;
     }
-    .lede { max-width: 42rem; color: rgba(250, 250, 250, 0.78); margin: 0; }
-    section { padding: 28px 0 8px; }
+    .lede {
+      max-width: 34rem;
+      color: rgba(250, 250, 250, 0.72);
+      margin: 0;
+      font-size: 16px;
+    }
+    section { padding: 36px 0 4px; }
     h2 {
       font-family: "Bricolage Grotesque", sans-serif;
       font-weight: 700;
-      font-size: 22px;
-      margin: 0 0 6px;
+      font-size: 13px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(250, 250, 250, 0.55);
+      margin: 0 0 16px;
     }
-    .section-note { margin: 0 0 16px; color: rgba(250, 250, 250, 0.62); font-size: 14px; }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
     }
     a.card {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      min-height: 168px;
-      padding: 18px 18px 16px;
+      gap: 10px;
+      min-height: 176px;
+      padding: 22px 22px 18px;
       background: var(--card);
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: 18px;
       color: inherit;
       text-decoration: none;
+      transition: border-color 0.15s ease, transform 0.15s ease;
     }
-    a.card:hover { border-color: var(--yellow); }
-    .tag {
-      align-self: flex-start;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      padding: 4px 8px;
-      border-radius: 999px;
+    a.card:hover {
+      border-color: var(--yellow);
+      transform: translateY(-2px);
     }
-    .tag.ok { background: rgba(248, 134, 115, 0.16); color: var(--coral); }
-    .tag.vn { background: rgba(84, 240, 163, 0.14); color: var(--mint); }
     .card h3 {
       font-family: "Bricolage Grotesque", sans-serif;
       font-weight: 700;
-      font-size: 22px;
-      margin: 4px 0 0;
-      letter-spacing: -0.02em;
+      font-size: 26px;
+      margin: 0;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
     }
-    .card p { margin: 0; color: rgba(250, 250, 250, 0.72); font-size: 14px; flex: 1; }
+    .card p {
+      margin: 0;
+      color: rgba(250, 250, 250, 0.68);
+      font-size: 14px;
+      flex: 1;
+    }
     .play {
       margin-top: 8px;
       align-self: flex-start;
@@ -97,13 +103,13 @@
       color: var(--navy);
       font-weight: 600;
       font-size: 14px;
-      padding: 8px 14px;
+      padding: 8px 16px;
       border-radius: 999px;
     }
     footer {
-      width: min(1080px, calc(100% - 40px));
-      margin: 28px auto 48px;
-      color: rgba(250, 250, 250, 0.5);
+      margin-top: 48px;
+      margin-bottom: 40px;
+      color: rgba(250, 250, 250, 0.4);
       font-size: 13px;
     }
   </style>
@@ -111,46 +117,39 @@
 <body>
   <header>
     <p class="mark">yellowHEAD</p>
-    <h1>Playables you can open and play</h1>
-    <p class="lede">Six Obsidian Knight builds approved to show, and the two Venue units sent on 2026-09-14. Each link is the playable itself. Sound starts on the first tap. Press M to mute. Use the browser back button to return here.</p>
+    <h1>Playables</h1>
+    <p class="lede">Open any one and play it here. Sound starts on the first tap. Press M to mute.</p>
   </header>
   <main>
     <section>
       <h2>Obsidian Knight</h2>
-      <p class="section-note">Approved by Omer, 2026-10-01 to 2026-10-03.</p>
       <div class="grid">
         <a class="card" href="obsidian/thorn-grimwood.html">
-          <span class="tag ok">Approved</span>
           <h3>Thorn Grimwood</h3>
           <p>Fight through the forest, pick skills, face the boss.</p>
           <span class="play">Play</span>
         </a>
         <a class="card" href="obsidian/ultimate-combo.html">
-          <span class="tag ok">Approved</span>
           <h3>Ultimate Combo</h3>
           <p>Pick four perks, then unleash the combo.</p>
           <span class="play">Play</span>
         </a>
         <a class="card" href="obsidian/gear-up.html">
-          <span class="tag ok">Approved</span>
           <h3>Gear Up</h3>
           <p>Lose the first fight, gear up, and come back.</p>
           <span class="play">Play</span>
         </a>
         <a class="card" href="obsidian/choose-weapon.html">
-          <span class="tag ok">Approved</span>
           <h3>Choose Your Weapon</h3>
           <p>Pick daggers, sword, or cleaver, then clear the horde.</p>
           <span class="play">Play</span>
         </a>
         <a class="card" href="obsidian/create-your-knight.html">
-          <span class="tag ok">Approved</span>
           <h3>Create Your Knight</h3>
           <p>Build your knight in the snow world.</p>
           <span class="play">Play</span>
         </a>
         <a class="card" href="obsidian/skill-tree.html">
-          <span class="tag ok">Approved</span>
           <h3>Skill Tree</h3>
           <p>Unlock the skill tree in the dungeon.</p>
           <span class="play">Play</span>
@@ -159,16 +158,13 @@
     </section>
     <section>
       <h2>Venue</h2>
-      <p class="section-note">Desktop previews, so they play in a normal browser.</p>
       <div class="grid">
         <a class="card" href="venue/reading-nook.html">
-          <span class="tag vn">Sent</span>
           <h3>Reading Nook</h3>
           <p>Design the sculpted-shelves reading nook.</p>
           <span class="play">Play</span>
         </a>
         <a class="card" href="venue/patio.html">
-          <span class="tag vn">Sent</span>
           <h3>Patio</h3>
           <p>Design the pergola patio.</p>
           <span class="play">Play</span>
@@ -177,10 +173,8 @@
     </section>
     <section>
       <h2>Golf Dreams</h2>
-      <p class="section-note">Lighthouse Hole 1, the client-final file from 2026-08-16. Drag back to putt.</p>
       <div class="grid">
         <a class="card" href="golf/lighthouse.html">
-          <span class="tag vn">Playable</span>
           <h3>Lighthouse Hole 1</h3>
           <p>Par 3 on the cliff. Drag back, then let it go.</p>
           <span class="play">Play</span>
@@ -188,6 +182,6 @@
       </div>
     </section>
   </main>
-  <footer>Published 2026-10-05. These are the browser previews, not the network trafficking files.</footer>
+  <footer>yellowHEAD</footer>
 </body>
 </html>
