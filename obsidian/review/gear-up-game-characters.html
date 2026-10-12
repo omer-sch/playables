@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="ad.orientation" content="portrait,landscape">
-<meta name="build" content="C3-5-16-5ad096de">
+<meta name="build" content="C3-5-17-77a9d4e6">
 <title>Obsidian Knight</title>
 <style>
 html,body{margin:0;padding:0;width:100%;height:100%;background:#0b0a0f;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
@@ -49,7 +49,7 @@ function addSoundListener(cb) {
   if (window.mraid && mraid.addEventListener) { try { mraid.addEventListener('audioVolumeChange', function (v) { cb(v === 0); }); } catch (e) {} }
   if (GA_ENVIRONMENT === 'preview') window.addEventListener('keydown', function (e) { if (e.key === 'm' || e.key === 'M') { __muted = !__muted; cb(__muted); } });
 }
-window.__qa = { build: 'C3-5-16-5ad096de', stage: 'boot', picks: [], ended: false, endcard: false, cta: 0, errors: [], events: [], ready: false, t: 0 };
+window.__qa = { build: 'C3-5-17-77a9d4e6', stage: 'boot', picks: [], ended: false, endcard: false, cta: 0, errors: [], events: [], ready: false, t: 0 };
 window.addEventListener('error', function (e) { window.__qa.errors.push(String(e.message || e)); });
 window.addEventListener('unhandledrejection', function (e) { window.__qa.errors.push('promise: ' + String(e.reason && e.reason.message || e.reason)); });
 
@@ -881,12 +881,12 @@ function draw() {
   if (W.scene === 'fight') {
     scr(); drawForest();
     wld(); ctx.setTransform(K * DPR, 0, 0, K * DPR, (-cam + shX) * K * DPR, shY * K * DPR);
-    for (const f of [...foes, hero]) shadow(f.ch.x, f.big ? 60 : 50);
+    for (const f of [...foes, hero]) { if (f.alive || !f.ch.done) shadow(f.ch.x, f.big ? 60 : 50); else shadow(f.ch.x + (f === hero ? -1 : 1) * 78 * (f.big ? 1.12 : 1), f.big ? 112 : 100); }
     /* the chest */
     /* bodies first, then the living, hero on top */
     const order = [...foes.filter(f => !f.alive), ...(hero.alive ? [] : [hero]), ...foes.filter(f => f.alive), ...(hero.alive ? [hero] : [])];
     CC2D.V = [K * DPR, 0, 0, K * DPR, (-cam + shX) * K * DPR, shY * K * DPR];
-    for (const f of order) { if (!f.alive) { f.ch.y = GY - 30; } drawChar(f); f.ch.y = GY; }
+    for (const f of order) { if (!f.alive) { f.ch.y = GY; } drawChar(f); f.ch.y = GY; }
     ctx.setTransform(K * DPR, 0, 0, K * DPR, (-cam + shX) * K * DPR, shY * K * DPR);
     for (const f of [...foes, hero]) drawTrail(f);
     ctx.setTransform(K * DPR, 0, 0, K * DPR, (-cam + shX) * K * DPR, shY * K * DPR);
