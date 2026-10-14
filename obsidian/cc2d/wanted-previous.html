@@ -3,7 +3,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="ad.orientation" content="portrait,landscape">
-<meta name="build" content="C4-3-75-0b8bba6c">
+<meta name="build" content="C4-3-80-205bedab">
 <title>Obsidian Knight</title>
 <style>
 html,body{margin:0;padding:0;width:100%;height:100%;background:#0b0a0f;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
@@ -49,7 +49,7 @@ function addSoundListener(cb) {
   if (window.mraid && mraid.addEventListener) { try { mraid.addEventListener('audioVolumeChange', function (v) { cb(v === 0); }); } catch (e) {} }
   if (GA_ENVIRONMENT === 'preview') window.addEventListener('keydown', function (e) { if (e.key === 'm' || e.key === 'M') { __muted = !__muted; cb(__muted); } });
 }
-window.__qa = { build: 'C4-3-75-0b8bba6c', stage: 'boot', picks: [], ended: false, endcard: false, cta: 0, errors: [], events: [], ready: false, t: 0 };
+window.__qa = { build: 'C4-3-80-205bedab', stage: 'boot', picks: [], ended: false, endcard: false, cta: 0, errors: [], events: [], ready: false, t: 0 };
 window.addEventListener('error', function (e) { window.__qa.errors.push(String(e.message || e)); });
 window.addEventListener('unhandledrejection', function (e) { window.__qa.errors.push('promise: ' + String(e.reason && e.reason.message || e.reason)); });
 
@@ -249,16 +249,20 @@ window.applyShape=function(c,key,rig){const sh=SHAPES[key]||{}; const bi=n=>rig.
  if(Object.keys(rot).length){c.rotAdd={};for(const b in rot)c.rotAdd[bi(b)]=rot[b]; c.rotClips=new Set(sh.rotClips||['Idle','Run','Hit']);}
  c.scale*=sh.s||1; return c;};
 
-/* grip.js — two-handed weapon grip fix for CC2D (load AFTER cc2d.js + shapes.js; call GRIP.apply AFTER applyShape).
-   What it does, for every two-handed carrier (GRIP.TABLE + TWOH set + any skin whose Weapon R sprite pivot is 0.33):
-   1. REST GRIP: replaces shapes.js's flat "+112 deg on Bone_Weapon R" (head up and BEHIND the shoulder = the
-      "holding it backwards" bug) with a per-character angle that carries the head FORWARD, toward the facing side,
-      in a low "ready" diagonal, and puts the LEFT hand on the haft with a small 2-bone IK (per frame, so it
-      follows Idle breathing / Run bob / Hit recoil).
-   2. NO SNAP: the rest-grip offsets (all of c.rotAdd + the IK) are faded in/out over GRIP.BLEND_IN/OUT seconds when
-      the clip changes between a rest clip (rotClips) and an attack clip, instead of switching on one frame, and the
-      stock cross-clip blend of play() is stretched to at least that long on those transitions.
-   Attack clips themselves are untouched (they already lead with the head: verified in grip_lab renders).
+/* grip.js v2 — two-handed weapon grip fix for CC2D (load AFTER cc2d.js + shapes.js; call GRIP.apply AFTER applyShape).
+   For every two-handed carrier (GRIP.TABLE + TWOH set + any skin whose Weapon R sprite pivot is 0.33):
+   1. REST GRIP ('plant' mode, hammers / mauls / axes): the resting maul. The haft is slid so BOTH fists sit near the
+      butt end, the right fist is put in front of the belly (IK), the haft is aimed steeply down-forward and the head
+      is solved onto the ground just in front of the feet every frame (lifted a little in Run/Walk/Sprint), and the
+      left fist goes on the haft just below the right one (IK). Nothing pokes more than ~0.4 hero heights in front
+      of the body. Replaces shapes.js's flat +112 deg (head up behind the shoulder = "held backwards") and v1's
+      26-28 deg low diagonal (read as a lance at game scale).
+      ('rot' mode, staffs): fixed upright angle, one hand, as in v1.
+   2. NO SNAP: the rest grip is faded in/out over the per-character blend times when the clip changes between a
+      rest clip (rotClips) and an attack clip, and the stock cross-clip blend of play() is stretched to at least
+      that long on those transitions. Rest -> attack lifts the head off the ground, forward, up and over into the
+      wind-up; attack -> rest sets it back down in front.
+   Attack clips themselves are untouched (they already lead with the head).
    Implementation: monkey-patches CC2D.Char.prototype.play/step/pose. Characters without c._grip run the
    original code paths unchanged. pose() below is the stock cc2d.js pose with the rotAdd gate replaced by a weight. */
 (function (G) {
@@ -268,22 +272,25 @@ window.applyShape=function(c,key,rig){const sh=SHAPES[key]||{}; const bi=n=>rig.
     BLEND_IN: 0.15,   // s: rest grip -> attack clip (rest offsets fade out, cross-clip blend stretched to at least this)
     BLEND_OUT: 0.16,  // s: attack clip -> rest clip (the swing often ends overhead; give the return a little longer)
     REST: ['Idle', 'Run', 'Hit', 'Walk', 'Sprint', 'Idle Wide'],
-    /* w   = absolute Bone_Weapon R rotAdd in rest clips (deg). shapes.js used +112 (head up/behind).
-             0 = haft level, head forward; + tilts the head up (toward the face side).
-       lh  = [min,max] where the left fist may sit on the haft, as a fraction of the haft length from the right
-             fist toward the head (null = leave the left arm alone, e.g. one-hand staff carry).
+    LIFT: 0.04,       // body heights the maul head is lifted off the ground in Run/Walk/Sprint
+    /* mode 'rot': w = absolute Bone_Weapon R rotAdd in rest clips (deg; 0 = level head forward, 90 = upright).
        rot = extra rotAdd on other bones (deg), added on top of the shape's own values.
        bin/bout = optional per-character BLEND_IN / BLEND_OUT (s). */
     TABLE: {
-      orc_chief: { w: 28, lh: [0.18, 0.42] },              // Orc Warlord, war hammer/axe
-      brute: { w: 26, lh: [0.18, 0.42] },                  // Grave Ogre, maul
-      fire_demon: { w: 28, lh: [0.18, 0.42] },             // great axe
-      // staffs: the CC2D staff is only ~half a body tall; held low it vanishes behind the hips, so it is carried
-      // upright beside the body, head up (shapes.js leaned it 22 deg back over the shoulder). Game: Healer Zombie.
-      skel_chief: { w: 93, lh: null, bin: .16, bout: .22 }, // bone staff
-      witch: { w: 93, lh: null, bin: .16, bout: .22 },      // staff
+      // 'plant' = resting maul: head planted on the ground just in front of the feet, haft steep down-forward,
+      // BOTH fists stacked near the butt end in front of the belly (right fist at gR, left fist at gL of the haft
+      // length measured from the butt). fist = right-fist target [forward, height] in body heights from the root.
+      // phi = allowed haft angle below horizontal (deg); the head is solved onto the ground every frame.
+      // wscale = weapon size used only when the build has not set its own boneMul on Bone_Weapon R
+      //          (c41 already uses .8 for the Warlord, c42 .52 for the Ogre).
+      orc_chief: { mode: 'plant', fist: [0.30, 0.62], gR: 0.05, gL: 0.17, phi: [40, 86], wscale: 0.8, bin: .24, bout: .2 },    // Orc Warlord, war hammer
+      brute: { mode: 'plant', fist: [0.30, 0.60], gR: 0.05, gL: 0.17, phi: [40, 86], wscale: 0.52, bin: .24, bout: .2 },       // Grave Ogre, maul
+      fire_demon: { mode: 'plant', fist: [0.30, 0.60], gR: 0.05, gL: 0.17, phi: [40, 86], wscale: 0.62, bin: .24, bout: .2 },  // great axe
+      // staffs: upright beside the body, head up (one hand), as in v1.
+      skel_chief: { mode: 'rot', w: 93, bin: .16, bout: .22 },
+      witch: { mode: 'rot', w: 93, bin: .16, bout: .22 },
     },
-    DEFAULT: { w: 28, lh: [0.18, 0.42] },                  // any other TWOH key / GRIP.register(key) without cfg
+    DEFAULT: { mode: 'plant', fist: [0.30, 0.60], gR: 0.05, gL: 0.17, phi: [40, 86], wscale: 0.7, bin: .24, bout: .2 },  // other TWOH / auto-detected
     register(key, cfg) { this.TABLE[key] = Object.assign({}, this.DEFAULT, cfg || {}); },
     has(key) { return !!this.TABLE[key] || !!(G.TWOH && G.TWOH.has(key)); },
     apply(c, key, rig) {
@@ -293,21 +300,28 @@ window.applyShape=function(c,key,rig){const sh=SHAPES[key]||{}; const bi=n=>rig.
       const wp = c.eff && c.eff[I.wslot] && c.eff[I.wslot].ps && c.eff[I.wslot].ps[0], twoHandSprite = !!(wp && wp.pv && wp.pv[1] > 0.3);
       const cfg = this.TABLE[key] || ((G.TWOH && G.TWOH.has(key)) || twoHandSprite ? this.DEFAULT : null); if (!cfg) return c;
       c.rotAdd = c.rotAdd || {};
-      c.rotAdd[I.wpn] = cfg.w;                                   // absolute: replaces the +112 (and any earlier build tweak)
+      c.rotAdd[I.wpn] = cfg.mode === 'plant' ? 0 : cfg.w;      // absolute: replaces the +112 (and any earlier build tweak)
+      if (cfg.wscale && !(c.boneMul && c.boneMul[I.wpn])) { c.boneMul = c.boneMul || {}; c.boneMul[I.wpn] = [cfg.wscale, cfg.wscale]; }
       if (cfg.rot) for (const b in cfg.rot) { const i = rig.nodes.findIndex(n => n.name === b); if (i >= 0) c.rotAdd[i] = ((sh.rot && sh.rot[b]) || 0) + cfg.rot[b]; }
       const rc = c.rotClips || new Set(sh.rotClips || ['Idle', 'Run', 'Hit']); for (const n of this.REST) if (rig.clips[n] && !animatesWeapon(rig, n)) rc.add(n); c.rotClips = rc;
-      c._grip = { cfg, key, I, gw: -1, gclip: null, ikR: [0, 0] };
+      c._grip = { cfg, key, I, gw: -1, gclip: null, Hu: bodyH(c, rig) };
       return c;
     },
     release(c) { if (c && c._grip) delete c._grip; return c; },   // back to the stock code path for this character
     weight(c) { const g = c._grip; return g ? (g.gclip === c.clipName ? ease(Math.max(0, g.gw)) : gate(c) ? 1 : 0) : 1; },
   };
-  const ease = x => x * x * (3 - 2 * x);
+  const ease = x => x * x * (3 - 2 * x), LOCO = new Set(['Run', 'Walk', 'Sprint']);
   function gate(c) { return !c.rotClips || c.rotClips.has(c.clipName); }
   const _ix = new WeakMap();
   function ix(rig) { let I = _ix.get(rig); if (I) return I; const f = n => rig.nodes.findIndex(x => x.name === n);
-    I = { wpn: f('Bone_Weapon R'), wnode: f('Weapon R'), ua: f('Bone_Upper Arm L'), la: f('Bone_Lower Arm L'), hand: f('Bone_Hand L'), gripL: f('Pos_Weapon L') };
+    I = { wpn: f('Bone_Weapon R'), pwpn: f('Pos_Weapon R'), wnode: f('Weapon R'), ua: f('Bone_Upper Arm L'), la: f('Bone_Lower Arm L'), gripL: f('Pos_Weapon L'), uaR: f('Bone_Upper Arm R'), laR: f('Bone_Lower Arm R') };
     I.wslot = rig.slotOfNode[I.wnode]; _ix.set(rig, I); return I; }
+  // standing body height per unit of c.scale (Idle frame 0, stock pose), so targets scale with the character
+  function bodyH(c, rig) {
+    const sv = [c.clip, c.clipName, c.t, c.blend, c._grip]; c._grip = null; c.clip = rig.clips.Idle || c.clip; c.clipName = 'Idle'; c.t = 0; c.blend = 0;
+    pose0.call(c); c.bounds(); const h = (c.bot - c.top) / (c.scale || 1);
+    [c.clip, c.clipName, c.t, c.blend, c._grip] = sv; return h > 0 && isFinite(h) ? h : 15;
+  }
   function animatesWeapon(rig, name) { const I = ix(rig); return rig.clips[name].tracks.some(t => t.i === I.wpn && t.kind === 'rot'); }
 
   const play0 = P.play, step0 = P.step, pose0 = P.pose;
@@ -352,7 +366,7 @@ window.applyShape=function(c,key,rig){const sh=SHAPES[key]||{}; const bi=n=>rig.
     if (this.boneMul) for (const k in this.boneMul) { const m = this.boneMul[k]; S[2 * k] *= m[0]; S[2 * k + 1] *= m[1]; }
     // ---- NEW: left fist onto the haft (weighted like the rest grip) ----
     // (off when the build has taken the rest offsets away: rotClips null = LIE/death, weapon slot hidden/dropped)
-    if (g.cfg.lh && w > 0.001 && this.rotClips && !this.lie && !(this.slotAlpha && this.slotAlpha[g.I.wslot] === 0)) leftHandIK(this, g, w);
+    if (g.cfg.mode === 'plant' && w > 0.001 && this.rotClips && !this.lie && !(this.slotAlpha && this.slotAlpha[g.I.wslot] === 0)) plantGrip(this, g, w);
     // ---- stock cross-clip blend ----
     if (this.blend > 0) {
       const bw = this.blend / this.blendDur, w2 = bw * bw * (3 - 2 * bw);
@@ -362,28 +376,37 @@ window.applyShape=function(c,key,rig){const sh=SHAPES[key]||{}; const bi=n=>rig.
       }
     }
   };
-  // CCD over lower+upper left arm so Pos_Weapon L (the fist's grip point) lands on the right hand's haft.
-  function leftHandIK(ch, g, w) {
-    const I = g.I, M = ch.M, R = ch.R; if (I.ua < 0 || I.la < 0 || I.gripL < 0 || I.wnode < 0) return;
-    const e = ch.eff && ch.eff[I.wslot]; if (!e || !e.ps || !e.ps.length) return; const p = e.ps[0];
-    const r0 = R[I.ua], r1 = R[I.la];
-    ch.world(); let o = 6 * I.wnode;
-    const ox = M[o + 4], oy = M[o + 5], hx = M[o + 2], hy = M[o + 3];        // haft origin (right fist) + head axis (sprite +y)
-    const L = p.h / p.ppu * (1 - p.pv[1]);                                       // head-side length in sprite units
-    const so = 6 * I.ua, sx = M[so + 4], sy = M[so + 5];                         // left shoulder
-    const hl2 = hx * hx + hy * hy; let f = ((sx - ox) * hx + (sy - oy) * hy) / (hl2 * L);   // closest haft point to the shoulder
-    f = Math.max(g.cfg.lh[0], Math.min(g.cfg.lh[1], f));
-    const tx = ox + hx * L * f, ty = oy + hy * L * f;
-    for (let it = 0; it < 6; it++) for (const j of [I.la, I.ua]) {
-      ch.world(); const jo = 6 * j, eo = 6 * I.gripL, pj = 6 * n_parent(ch, j);
-      const jx = M[jo + 4], jy = M[jo + 5], ex = M[eo + 4], ey = M[eo + 5];
-      let d = Math.atan2(ty - jy, tx - jx) - Math.atan2(ey - jy, ex - jx); d = Math.atan2(Math.sin(d), Math.cos(d));
-      const det = M[pj] * M[pj + 3] - M[pj + 1] * M[pj + 2];
-      R[j] += d / D2R * (det < 0 ? -1 : 1);
+  // CCD: rotate joints (child first) so the effector node's world origin reaches (tx, ty)
+  function ccd(ch, joints, eff, tx, ty, iters) {
+    const M = ch.M, R = ch.R;
+    for (let it = 0; it < iters; it++) for (const j of joints) {
+      ch.world(); const jo = 6 * j, eo = 6 * eff, pj = 6 * ch.rig.nodes[j].parent;
+      let d = Math.atan2(ty - M[jo + 5], tx - M[jo + 4]) - Math.atan2(M[eo + 5] - M[jo + 5], M[eo + 4] - M[jo + 4]); d = Math.atan2(Math.sin(d), Math.cos(d));
+      R[j] += d / D2R * (M[pj] * M[pj + 3] - M[pj + 1] * M[pj + 2] < 0 ? -1 : 1);
     }
-    // weight the IK correction (rest-grip fade); keep the solved delta for QA
-    const d0 = R[I.ua] - r0, d1 = R[I.la] - r1; g.ikR[0] = d0; g.ikR[1] = d1;
-    R[I.ua] = r0 + wrap(d0) * w; R[I.la] = r1 + wrap(d1) * w;
+  }
+  // resting-maul grip: slide the haft so the right fist sits near the butt, put that fist in front of the belly,
+  // aim the haft steeply down-forward so the head rests on the ground, then put the left fist on the haft just
+  // below the right one. Everything is solved at full strength, then faded by w (rest <-> attack blend).
+  function plantGrip(ch, g, w) {
+    const I = g.I, cfg = g.cfg, M = ch.M, R = ch.R, Pp = ch.P; if (I.uaR < 0 || I.laR < 0 || I.ua < 0 || I.la < 0 || I.gripL < 0 || I.wnode < 0) return;
+    const e = ch.eff && ch.eff[I.wslot]; if (!e || !e.ps || !e.ps.length) return; const p = e.ps[0], bb = p.bb || [0, 0, p.w, p.h];
+    const js = [I.uaR, I.laR, I.wpn, I.ua, I.la], r0 = js.map(j => R[j]), px0 = Pp[2 * I.wnode];
+    const yp = p.h * (1 - p.pv[1]), yt = bb[1], yb = bb[3], len = yb - yt, yg = yb - cfg.gR * len, yl = yb - cfg.gL * len;
+    Pp[2 * I.wnode] = px0 + (yg - yp) / p.ppu;                                   // fist now holds the haft near the butt
+    const f = ch.face, Hs = g.Hu * ch.scale, tx = ch.x + f * cfg.fist[0] * Hs, ty = ch.y - cfg.fist[1] * Hs;
+    const gy = ch.y - (LOCO.has(ch.clipName) ? (cfg.lift == null ? GRIP.LIFT : cfg.lift) : 0) * Hs;   // moving: head hovers, no ground scrape
+    ccd(ch, [I.laR, I.uaR], I.wpn, tx, ty, 5);                                     // right fist in front of the belly
+    for (let it = 0; it < 2; it++) {                                               // haft: head down-forward onto the ground
+      ch.world(); const o = 6 * I.wnode, fo = 6 * I.wpn, ax = M[o + 2], ay = M[o + 3], a = Math.hypot(ax, ay) || 1;
+      const Lw = (yg - yt) / p.ppu * a, fy = M[fo + 5];
+      let phi = Math.asin(Math.max(-1, Math.min(1, (gy - fy) / Lw))) / D2R; phi = Math.max(cfg.phi[0], Math.min(cfg.phi[1], phi));
+      let d = Math.atan2(Math.sin(phi * D2R), f * Math.cos(phi * D2R)) - Math.atan2(ay, ax); d = Math.atan2(Math.sin(d), Math.cos(d));
+      const pj = 6 * I.pwpn; R[I.wpn] += d / D2R * (M[pj] * M[pj + 3] - M[pj + 1] * M[pj + 2] < 0 ? -1 : 1);
+    }
+    ch.world(); { const o = 6 * I.wnode, k = (yg - yl) / p.ppu;                   // left fist just below the right one
+      ccd(ch, [I.la, I.ua], I.gripL, M[6 * I.wpn + 4] + M[o + 2] * k, M[6 * I.wpn + 5] + M[o + 3] * k, 6); }
+    if (w < 1) { js.forEach((j, i) => { R[j] = r0[i] + wrap(R[j] - r0[i]) * w; }); Pp[2 * I.wnode] = px0 + (Pp[2 * I.wnode] - px0) * w; }
   }
   const wrap = d => ((d + 180) % 360 + 360) % 360 - 180;
   function n_parent(ch, j) { return ch.rig.nodes[j].parent; }
@@ -602,7 +625,7 @@ function fx_hitOn(f, dmg, o) {   /* game-true hit: number + blood cloud + a one-
   const hx = f.ch.x - f.ch.face * (f.big ? 24 : 10), hy = f.top + (GY - f.top) * .3;
   const Z = W.zoom || 1, sx = cl((f.ch.x - cam) * Z, 70, LW - (o.icon ? 115 : 70)), nx = cam + sx / Z;
   pop(nx + (o.dx || 0) + (Math.random() - .5) * 16, Math.max(bodyTop(f) - 30, W.numTop || 0) + (o.dy || 0), String(dmg), { size: crit ? 56 : 40, fill: crit ? '#ffd23a' : '#ff2f24', stroke: '#1a0402', crit, life: 1.0, rise: .15 * (typeof HH === 'number' ? HH : 269), icon: o.icon });
-  W.fx.push({ k: 'cloud', x: hx, y: hy, t: 0, life: .2, s: f.boss ? 1.3 : 1, col: f.blood || '#7a0a0a', world: true }); burst(hx, hy, crit ? 14 : 9, f.blood || '#8e0c0c', 200);
+  W.fx.push({ k: 'cloud', x: hx, y: hy, t: 0, life: .26, s: f.boss ? 1.3 : 1, col: f.blood || '#7a0a0a', world: true, seed: Math.random() * 1000, dir: f.ch.face === -1 ? 1 : -1 }); burst(hx, hy, crit ? 14 : 9, f.blood || '#8e0c0c', 200);
   f.recoil = .12;
   if (o.stun) f.stun = o.stun;
   sfx('PUNCH_' + (Math.random() * 3 | 0), .9, crit ? .85 : 1);
@@ -616,6 +639,8 @@ function kill(f, crit) {
   f.dieAt = W.gt; f.kb = 0; f.ai = null;
   if (f !== hero) { sfx(f.boss ? 'death-final' : 'death-' + (1 + (Math.random() * 3 | 0)), .9); W.rage = Math.min(100, W.rage + (f.boss ? 0 : 12)); }
   else sfx('death-3', .9, .8);
+  if (f.boss && hero && hero.alive) {   /* a heavy stagger back, then the topple lands just in front of the knight */
+    const X = Math.max(0, (f.standH || 380) * (f.skin === 'golem' ? 1.2 : 1.05) - (f.ch.x - hero.ch.x) + 30); f.kb = X; f.kbSpd = Math.max(200, X / .3); f.dieAt = W.gt + .3; f.ch.play('Hit', { loop: false, blend: .06, speed: .7 }); }
   hitStop(.14); doShake(crit ? 14 : 9); QA.events.push('die:' + f.name);
 }
 /* the weapon tip in world space: the far end of the weapon sprite's long axis */
@@ -703,7 +728,7 @@ function pill(f) {
   ctx.restore();
   if (f.tier) tierTag(x, y + h / 2 + 15 * U, f.tier, f.tierT);
 }
-function stars(f) { if (f.stun <= 0) return; const cx = f.ch.x, cy = bodyTop(f) - 14;
+function stars(f) { if (f.stun <= 0 || !f.alive) return; const cx = f.ch.x, cy = bodyTop(f) - 14;
   for (let i = 0; i < 4; i++) { const a = W.t * 5 + i * 1.57, x = cx + Math.cos(a) * 34, y = cy + Math.sin(a) * 9; ctx.save(); ctx.translate(x, y); ctx.rotate(W.t * 4 + i);
     ctx.fillStyle = '#ffe14a'; ctx.strokeStyle = '#7a4a00'; ctx.lineWidth = 2; ctx.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 4 : 10, b = k * .628; ctx[k ? 'lineTo' : 'moveTo'](Math.cos(b) * r, Math.sin(b) * r); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); } }
 
@@ -1176,6 +1201,7 @@ function drawWorld() {
   wld();
   for (const f of all) if (f.ghosts) for (const g of f.ghosts) { const sx = f.ch.x, sy = f.ch.y; f.ch.x = g.x; f.ch.y = g.y; f.ch.alpha = g.a * .35; f.ch.draw(ctx); f.ch.x = sx; f.ch.y = sy; f.ch.alpha = 1; }
   if (W.gchest) drawGChest();
+  drawProps();
   for (const f of order) { if (f.vanish >= 1) continue; f.ch.alpha = 1 - (f.vanish || 0);
     if (f.ghost) { const k = cl((W.gt - f.ghost.t0) / .6, 0, 1), g = f.ghost.c; g.alpha = 1 - k; g.draw(ctx); g.alpha = 1; f.ch.alpha = k; } if (f.rise > 0) { ctx.save(); wld(); ctx.beginPath(); ctx.rect(cam - 300, -3000, LW / (W.zoom || 1) + 600, 3000 + GY + 3); ctx.clip(); drawChar(f); ctx.restore(); wld(); } else if (f.weak && f.alive) { ctx.save(); ctx.filter = 'saturate(.35) brightness(.92)'; drawChar(f); ctx.restore(); weakFx(f); } else drawChar(f); f.ch.alpha = 1; }
   wld();
@@ -1205,7 +1231,10 @@ function weakCracks(f) {   /* dark fissures with a faint violet glow, fixed to t
 }
 function drawFx6() {
   for (const p of W.fx) { if (p.t < 0) continue; const k = p.t / p.life;
-    if (p.k === 'cloud') { const x = p.x - cam, r = .25 * HH * p.s * (.8 + .4 * k); ctx.save(); ctx.globalAlpha = 1 - k * k; const g = ctx.createRadialGradient(x, p.y, 2, x, p.y, r); g.addColorStop(0, p.col); g.addColorStop(.6, p.col); g.addColorStop(1, 'rgba(60,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, p.y, r, 0, 6.283); ctx.fill(); ctx.restore(); }
+    if (p.k === 'cloud') {   /* the game's blood: a directional droplet splatter, not a disc */
+      const x = p.x - cam, R = .32 * HH * p.s * (.45 + .55 * E.o(k)), r0 = rnd32(p.seed | 0), base = (p.dir || 1) > 0 ? -.25 : Math.PI + .25, bone = /d8d0b8/.test(p.col); ctx.save(); ctx.globalAlpha = 1 - k * k; ctx.lineCap = 'round';
+      for (let i = 0; i < 13; i++) { const a = base + (r0() - .5) * 2.5, L = R * (.35 + .65 * r0()), w = (2 + 4.5 * r0()) * p.s; ctx.strokeStyle = bone ? (i % 3 ? '#cfc6ae' : '#efe8d6') : (i % 3 ? '#b3001b' : '#e3203a'); ctx.lineWidth = w * (1 - k * .6); ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * L * .25, p.y + Math.sin(a) * L * .25); ctx.lineTo(x + Math.cos(a) * L, p.y + Math.sin(a) * L + k * 10); ctx.stroke(); ctx.fillStyle = bone ? '#d8d0b8' : '#9e0018'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * L * 1.12, p.y + Math.sin(a) * L * 1.12 + k * 14, w * .75, 0, 6.283); ctx.fill(); }
+      ctx.restore(); }
     else if (p.k === 'xpl') { const x = p.x - cam, R = .6 * HH * p.s * (.55 + .45 * E.o(k)), r0 = rnd32(p.seed | 0); ctx.save(); ctx.globalAlpha = 1 - k * k; ctx.lineCap = 'round';
       const g = ctx.createRadialGradient(x, p.y, 2, x, p.y, R * .55); g.addColorStop(0, '#d0101a'); g.addColorStop(.7, 'rgba(150,0,10,.85)'); g.addColorStop(1, 'rgba(120,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, p.y, R * .55, 0, 6.283); ctx.fill();
       for (let i = 0; i < 22; i++) { const a = r0() * 6.283, L = R * (.5 + .5 * r0()), w = 3 + 6 * r0(); ctx.strokeStyle = i % 3 ? '#a00a12' : '#e01822'; ctx.lineWidth = w * (1 - k * .5); ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * R * .2, p.y + Math.sin(a) * R * .2); ctx.lineTo(x + Math.cos(a) * L, p.y + Math.sin(a) * L); ctx.stroke(); ctx.fillStyle = '#b00d16'; ctx.beginPath(); ctx.arc(x + Math.cos(a) * L * 1.08, p.y + Math.sin(a) * L * 1.08, w * .7, 0, 6.283); ctx.fill(); }
@@ -1318,7 +1347,7 @@ function fitScale() {   /* hero = 28 % of the screen height (GAME_TRUTH §F) */
   const c = new CC2D.Char(rig, SK.rookie, { x: 0, y: 0, scale: SC }); c.play('Idle', { loop: true, blend: 0 }); c.pose(); const b = pxBox(c, 'body'); if (!b) return;
   HH = T6.HERO_H * LH; SC = SC * HH / (b.b - b.t);
 }
-W.later = [];
+W.later = []; W.tasks = [];
 const T6 = { SWING: 1.0, CONTACT: .10, NUM_LIFE: 1.0, FALL: .35, SETTLE: .5, WALK: 1.65, QUEUE: 1.2, ENEMY_ATK: 1.8, ENEMY_WIND: .2, BOSS_WIND: .55, RIPPLE: .12, HERO_H: .28, MELEE: .85, KB: .15 };
 let HH = 269;   /* hero height in logical px (28 % of 960), measured at boot */
 function walkK() { return T6.WALK * HH / RUNV; }
@@ -1387,7 +1416,7 @@ function* chop(def, dmg, o) {
   hero.ch.play(clip, { loop: false, speed: 1, blend: .1, onEnd: () => { if (hero.busy === 'atk') hero.busy = null; if (hero.alive) hero.ch.play('Idle', { loop: true, blend: .14 }); } });
   sfx('slice', .7); yield* wait(land);
   if (def.alive && hero.alive) { const extra = o.extra; landHit(def, dmg, o); if (extra) extra(); }
-  yield* wait(Math.max(.3, T6.SWING - land));
+  yield* wait(Math.max(.28, (W.swingP || T6.SWING) - land));
 }
 /* a card riding on the chop: game-true look (number + icon), the newest card procs at once, then one proc every 2nd chop */
 function cardHit(def, base, o) {
@@ -1418,20 +1447,21 @@ function heroHurt(dmg, o) {
   pop(hero.ch.x, Math.max(hero.top - 26, W.numTop || 0), String(dmg), { size: o.lethal ? 52 : 42, fill: '#ff2f24', stroke: '#1a0402', life: T6.NUM_LIFE, rise: .15 * HH });
   sfx('PUNCH_' + (Math.random() * 3 | 0), .8);
   if (hero.hp <= 0) { heroDown(o); return; }
+  if (o.shrug) return;   /* the Obsidian Knight shrugs it off: no flinch */
   hero.busy = 'hit'; hero.ch.play('Hit', { loop: false, blend: .08, speed: 1.15, onEnd: () => { if (hero.busy === 'hit') hero.busy = null; if (hero.alive) hero.ch.play('Idle', { loop: true, blend: .14 }); } });
   hero.kb = -(o.kb == null ? T6.KB : o.kb) * HH; hero.kbSpd = 420;
 }
 function heroDown(o) {   /* the low point: slow-mo, the knight is thrown back and topples */
   hero.alive = false; hero.busy = 'dead'; hero.pill = false; hero.trail = []; hero.ai = null; QA.events.push('heroDown');
-  W.slow = .25; W.slowT = .8; sfx('death-3', 1, .8); sfx('death-final', .6, .7);
-  hero.ch.play('Hit', { loop: false, blend: .05, speed: .9 }); hero.kb = -(o.throwBack || .7) * HH; hero.kbSpd = 900; hero.fadeW = 0;
-  hero.dieAt = W.gt + .07;
+  sfx('death-3', 1, .8); sfx('death-final', .6, .7);
+  hero.ch.play('Hit', { loop: false, blend: .05, speed: .9 }); hero.kb = -(o.throwBack || .3) * HH; hero.kbSpd = 700;
+  hero.dieAt = W.gt + .24;   /* a short stagger, then the slow-mo fall */
 }
 function enemyStrike(e, dmg, o) {
   o = o || {}; if (!e.alive || e.busy === 'atk' || e.stun > 0) return false; const clip = o.clip || (e.boss && e.skin === 'golem' ? 'Attack Two Handed 1' : atkClip(e.skin === 'skel_bone' ? 'skel_tribe' : e.skin));
   const hf = hitFracFor(e, clip, 'Weapon R'), len = rig.clips[clip].len, wind = o.wind || T6.ENEMY_WIND, sp = Math.max(.25, Math.min(1.2, hf * len / wind));
   e.busy = 'atk'; e.trailSlot = 'Weapon R'; sfx(Math.random() < .5 ? 'shout-1' : 'shout-2', .45);
-  e.ch.play(clip, { loop: false, speed: sp, blend: .1, events: [[hf, () => { e.swingHitT = W.gt; e.ch.speed = 1; if (o.onHit) o.onHit(); else heroHurt(dmg, o); }]], onEnd: () => { e.busy = null; if (e.alive) e.ch.play('Idle', { loop: true, blend: .14 }); } });
+  e.ch.play(clip, { loop: false, speed: sp, blend: .1, events: [[hf, () => { e.swingHitT = W.gt; e.ch.speed = e.boss ? .8 : 1; if (o.onHit) o.onHit(); else heroHurt(dmg, o); }]], onEnd: () => { e.busy = null; if (e.alive) e.ch.play('Idle', { loop: true, blend: e.boss ? .3 : .14 }); } });
   return true;
 }
 function startAI(e, first, dmg) { e.ai = { t: first, dmg }; }
@@ -1448,10 +1478,10 @@ function* blockBash(e, dmg, wind) {   /* shield up on the tell, the blow is BLOC
   yield* until(() => done || !e.alive); yield* wait(.32);
   yield* bash(e, 5);
 }
-function* bash(def, dmg, kbk) {   /* Attack Off Hand 1: the shield bash */
-  const clip = 'Attack Off Hand 1', hf = HIT[clip] || .4; let landed = false; if (def.alive) yield* toRange(hero, def, clip, 0); hero.busy = 'atk';
-  hero.ch.play(clip, { loop: false, speed: 1.1, blend: .1, events: [[hf, () => { landed = true; hero.swingHitT = W.gt; if (def.alive) { fx_hitOn(def, dmg, {}); def.kb = (kbk || .1) * HH; def.kbSpd = 360; } sfx('PUNCH_1', 1, .8); }]], onEnd: () => { if (hero.busy === 'atk') hero.busy = null; if (hero.alive) hero.ch.play('Idle', { loop: true, blend: .14 }); } });
-  yield* until(() => landed || !hero.alive); yield* wait(.45); QA.events.push('bash');
+function* bash(def, dmg, kbk) {   /* Attack Off Hand 1: the shield bash, a lunge in, no sword slash; the target staggers back */
+  const clip = 'Attack Off Hand 1', hf = HIT[clip] || .4; let landed = false; hero.noSlash = true; if (def.alive) { hero.kbSpd = 700; yield* toRange(hero, def, clip, 0); } hero.busy = 'atk';
+  hero.ch.play(clip, { loop: false, speed: 1.15, blend: .08, events: [[hf, () => { landed = true; hero.swingHitT = W.gt; if (def.alive) { if (def.boss) { def.busy = null; def.stun = 0; } fx_hitOn(def, dmg, {}); def.kb = (kbk || .1) * HH; def.kbSpd = 420; } const sx = hero.ch.x + .25 * HH, sy = GY - .5 * HH; spark(sx, sy, 1.3); sfx('PUNCH_1', 1, .8); }]], onEnd: () => { hero.noSlash = false; if (hero.busy === 'atk') hero.busy = null; if (hero.alive) hero.ch.play('Idle', { loop: true, blend: .14 }); } });
+  yield* until(() => landed || !hero.alive); yield* wait(.35); QA.events.push('bash');
 }
 function* walkTo(x) { if (x - hero.ch.x > 4) { if (W.postKill && W.postKill.until > W.gt + .6) W.postKill.until = W.gt + .6; yield* advance(x, walkK()); } }
 function inFrame(e) { const b = pxBox(e.ch, 'all'), Z = W.zoom || 1; return !b || ((b.r - cam) * Z <= LW - 17 && (b.l - cam) * Z >= 17); }
@@ -1464,6 +1494,33 @@ function* dash(toX) {   /* the ultimate's short Sprint dash */
   walkLoop(false); hero.ch.speed = 1; hero.ch.play('Idle', { loop: true, blend: .1 });
 }
 
+
+/* ------------------------------------------------------------------ dropped weapons: the knight's sword and shield fall as visible props */
+W.props = [];
+function snapGroup(c, re) {
+  c.bounds(); const mg = 200, x0 = Math.floor(c.lft - mg), y0 = Math.floor(c.top - mg), w = Math.ceil(c.rgt + mg) - x0, h = Math.ceil(c.bot + 80) - y0;
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const x = cv.getContext('2d'); const V0 = CC2D.V, sa = c.slotAlpha;
+  CC2D.V = [1, 0, 0, 1, -x0, -y0]; c.slotAlpha = {}; rig.slots.forEach((s, i) => { if (!re.test(s.name) || SLASH.includes(i)) c.slotAlpha[i] = 0; }); c.draw(x); c.slotAlpha = sa; CC2D.V = V0;
+  const d = x.getImageData(0, 0, w, h).data; let t = -1, b = -1, l = w, r = -1;
+  for (let y = 0; y < h; y += 2) { const row = y * w * 4; for (let q = 0; q < w; q += 2) if (d[row + q * 4 + 3] > 30) { if (t < 0) t = y; b = y; if (q < l) l = q; if (q > r) r = q; } }
+  if (t < 0) return null; l = Math.max(0, l - 2); t = Math.max(0, t - 2); const ow = Math.min(w - l, r - l + 4), oh = Math.min(h - t, b - t + 4), o = document.createElement('canvas'); o.width = ow; o.height = oh; o.getContext('2d').drawImage(cv, l, t, ow, oh, 0, 0, ow, oh);
+  return { img: o, x: x0 + l + ow / 2, y: y0 + t + oh / 2, w: ow, h: oh };
+}
+function dropProps(f) {
+  const c = f.ch; c.world();
+  [[/^Weapon R/, -1, 1], [/^(Shield|Weapon L)/, 1, -1]].forEach(([re, vx, sp]) => { const g = snapGroup(c, re); if (!g) return;
+    g.rot = 0; g.rt = g.h > g.w ? sp * Math.PI / 2 : 0; g.vx = vx * 70 * c.face; g.vy = -170; g.landed = false; W.props.push(g); });
+  c.slotAlpha = c.slotAlpha || {}; rig.slots.forEach((s, i) => { if (/^(Weapon|Shield)/.test(s.name)) c.slotAlpha[i] = 0; });
+}
+function stepProps(dt) {
+  for (const p of W.props) { if (p.landed) { p.rot += (p.rt - p.rot) * Math.min(1, dt * 14); } else { p.vy += 1500 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += (p.rt - p.rot) * Math.min(1, dt * 7); }
+    const hh = Math.abs(p.w / 2 * Math.sin(p.rot)) + Math.abs(p.h / 2 * Math.cos(p.rot)); if (p.y + hh >= GY + 2) { p.y = GY + 2 - hh; if (!p.landed && p.vy > 0) { p.landed = true; dust(p.x, 5, 90); sfx('PUNCH_1', .4, 1.6); } p.vy = 0; p.vx = 0; } }
+}
+function drawProps() { if (!W.props.length || W.scene !== 'fight') return; wld(); for (const p of W.props) { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.drawImage(p.img, -p.w / 2, -p.h / 2); ctx.restore(); } }
+/* how far forward of its x the attacker's weapon reaches at a given clip fraction (rendered pixels) */
+function reachAt(f, clip, frac) { const c = f.ch, save = [c.clip, c.clipName, c.t, c.blend]; c.clip = rig.clips[clip]; c.clipName = clip; c.blend = 0; c.t = c.clip.len * frac; c.pose(); const b = pxBox(c, 'weap');
+  [c.clip, c.clipName, c.t, c.blend] = save; c.pose(); if (!b) return 0; return c.face === -1 ? c.x - b.l : b.r - c.x; }
+
 /* ------------------------------------------------------------------ the script */
 function* board() {
   QA.stage = 'board'; W.scene = 'board'; W.hudA = 1; trayNew(); W.fade = 0;
@@ -1471,7 +1528,7 @@ function* board() {
   BOARD.posters = ['headless', 'skull', 'golem'].map(id => { const T = TARGETS[id]; return mkPoster(id, T.skin, T.name, T.reward); });
   /* the rookie walks up to the board */
   const hc = new CC2D.Char(rig, SK.rookie, { x: 0, y: 0, scale: SC * .82, face: -1 }); hc.play('Run', { loop: true, blend: 0 }); hc.speed = 1.1;
-  const hx1 = PORT ? LW * .82 : LW * .84; BOARD.hero = { c: hc, x: LW + 70, fy: PORT ? 900 : 905, tier: TIER0 };
+  const hx1 = PORT ? LW * .82 : LW * .84; BOARD.hero = { c: hc, x: LW + 70, fy: PORT ? 932 : 905, tier: TIER0 };
   for (let i = 0; i < 3; i++) { BOARD.posters[i].slam = W.t; sfx('PUNCH_' + i, .8, .7); burst(boardLayout().xs[i], boardLayout().ys[i] - boardLayout().ph / 2, 10, '#c9a06a', 200, false); let u = 0; while (u < .09) { const dt = yield; u += dt; BOARD.hero.x -= dt * 260; } }
   { const v = RUNV * .82 * 1.1; while (BOARD.hero.x > hx1) { const dt = yield; BOARD.hero.x = Math.max(hx1, BOARD.hero.x - v * dt); } hc.speed = 1; hc.play('Idle', { loop: true, blend: .15 }); }
   /* PICK YOUR BOUNTY: the hand drifts across the posters and settles on the golem */
@@ -1534,7 +1591,7 @@ function blockHit(k) {
   hero.lastBlockT = W.gt; hero.busy = 'guard'; hero.ch.play('Shield Block', { loop: false, blend: .08, onEnd: () => { if (hero.busy === 'guard') hero.busy = null; if (hero.alive) hero.ch.play('Idle', { loop: true, blend: .14 }); } });
   const sx = hero.ch.x + .22 * HH, sy = GY - .55 * HH; spark(sx, sy, 1.7); burst(sx, sy, 20, '#e2d0ff', 340); sfx('PUNCH_2', 1, 1.15); sfx('PUNCH_0', .7, 1.5);
   pop(hero.ch.x, Math.max(hero.top - 26, W.numTop || 0), '0', { size: 48, fill: '#9fd8ff', stroke: '#06223a', life: T6.NUM_LIFE, rise: .15 * HH, icon: 'ic_block' });
-  hero.kb = -(k == null ? .1 : k) * HH; hero.kbSpd = 380; QA.events.push('block');
+  hero.kb = -(k == null ? .15 : k) * HH; hero.kbSpd = 420; QA.events.push('block');
 }
 /* boss signatures: a bigger, slower version of an enemy wind-up with a readable tell. o.block: the knight's shield holds */
 function* bossSig(kind, dmg, o) {
@@ -1542,16 +1599,20 @@ function* bossSig(kind, dmg, o) {
   const land = () => { if (o.block) blockHit(o.kb); else heroHurt(dmg, o); };
   if (o.block || o.guard) { hero.busy = 'guard'; hero.ch.play('Shield Ready', { loop: false, blend: .14 }); }   /* the shield comes up on the tell */
   if (kind === 'pound') {   /* golem: both fists up, slam into the ground in front, the shockwave reaches the knight */
-    const bi = rig.nodes.findIndex(q => q.name === 'Bone_Body'), c = b.ch, rc = c.rotClips, base = c.rotAdd[bi] || 0; c.rotClips = null;   /* pose override: the torso stays back, the fists land at reach */
-    let hitDone = false; enemyStrike(b, dmg, { clip: 'Attack Two Handed 1', wind, onHit: () => { hitDone = true; const fx = Math.min(b.lft + 20, b.ch.x - meleeDist(b) * .55); dust(fx, 30, 260); crack(fx); dust((fx + hero.ch.x) / 2, 14, 220); sfx('PUNCH_0', 1, .5); land(); QA.events.push('pound'); } });
-    const x0 = b.ch.x, l0 = b.lft; let t = 0; const hold = () => { const lean = l0 - (b.lft - (b.ch.x - x0)); b.ch.x = x0 + cl(lean - 12, 0, .17 * HH); };
-    while (b.busy === 'atk') { t += yield; c.rotAdd[bi] = base - 30 * cl(t / .18, 0, 1); hold(); }
-    let u = 0; while (u < .35) { u += yield; c.rotAdd[bi] = base - 30 * (1 - cl(u / .3, 0, 1)); hold(); } c.rotAdd[bi] = base; c.rotClips = rc; b.ch.x = x0;
+    const clip = 'Attack Two Handed 1', hf = hitFracFor(b, clip, 'Weapon R'), R = reachAt(b, clip, hf), hb = pxBox(hero.ch, o.block ? 'all' : 'body');
+    const front = hb ? hb.r : hero.ch.x + 40, x0 = b.ch.x, gb = pxBox(b.ch, 'body'), hbb = pxBox(hero.ch, 'body'), hwb = pxBox(hero.ch, 'weap');
+    const maxStep = gb && hbb ? Math.max(0, Math.min(gb.l - hbb.r - 60, gb.l - (hwb ? hwb.r : hbb.r) - 60)) : 0, want = cl(front + R - (o.block ? 2 : 18), x0 - maxStep, x0);   /* he steps in as far as bodies allow */   /* he steps in: the fists land ON the knight */
+    let hit = false; enemyStrike(b, dmg, { clip, wind, onHit: () => { hit = true; const wb = pxBox(b.ch, 'weap'), fx = wb ? wb.l + 24 : front; dust(fx, 24, 240); crack(fx); sfx('PUNCH_0', 1, .5); land(); QA.events.push('pound'); } });
+    let t = 0; while (!hit && b.alive) { t += yield; b.ch.x = x0 + (want - x0) * E.io(cl(t / (wind + .1), 0, 1)); }
+    const back = function* () { let u = 0, prev = 0; const d = (x0 - b.ch.x) * .5; while (u < .55) { u += yield; const off = d * E.io(cl((u - .12) / .43, 0, 1)); b.ch.x += off - prev; prev = off; } };   /* he pulls back out of the knight's space, eased */
+    if (o.fast) W.tasks.push(back()); else yield* back();
   } else if (kind === 'charge') {   /* Headless: shield up, a short shield lunge into the knight */
     b.busy = 'atk'; b.ch.play('Shield Ready', { loop: false, blend: .12, speed: .8 }); yield* wait(wind);
-    const x0 = b.ch.x; b.ch.play('Run', { loop: true, blend: .1, speed: 1.4 }); let t = 0; while (t < .18) { const dt = yield; t += dt; b.ch.x = x0 - 70 * (t / .18); }
+    const bb = pxBox(b.ch, 'all'), hb = pxBox(hero.ch, 'all'), LG = cl(bb && hb ? bb.l - hb.r + 8 : 70, 30, 1.2 * HH);   /* the lunge ends with his shield ON the knight */
+    const x0 = b.ch.x; b.ch.play('Run', { loop: true, blend: .1, speed: 1.4 }); let t = 0; while (t < .2) { const dt = yield; t += dt; b.ch.x = x0 - LG * E.o(cl(t / .2, 0, 1)); }
     b.ch.play('Shield Block', { loop: false, blend: .08 }); b.swingHitT = W.gt; land(); sfx('PUNCH_0', 1, .7); QA.events.push('charge');
-    t = 0; while (t < .35) { const dt = yield; t += dt; b.ch.x = x0 - 70 * (1 - t / .35); } b.ch.x = x0; b.busy = null; b.ch.play('Idle', { loop: true, blend: .15 });
+    const back = function* () { let t = 0; while (t < .45) { const dt = yield; t += dt; b.ch.x = x0 - LG * (1 - E.io(cl(t / .45, 0, 1))); } b.busy = null; if (b.alive) b.ch.play('Idle', { loop: true, blend: .2 }); };
+    if (o.fast) W.tasks.push(back()); else yield* back();
   } else if (kind === 'bolt') {   /* Skull Chief: staff raised, a red bolt to the knight */
     b.busy = 'atk'; b.ch.play('Shield Ready', { loop: false, blend: .12, speed: .7 }); let t = 0; while (t < wind) { const dt = yield; t += dt; b.charge = t / wind; } b.charge = 0;
     b.ch.world(); const tp = tipOf(b, 'Weapon R') || [b.ch.x - 60, GY - 300]; W.fx.push({ k: 'bolt', x0: tp[0], y0: tp[1], x1: hero.ch.x + (o.block ? .24 * HH : 10), y1: GY - .6 * HH, t: 0, life: .3 }); sfx('slice', .8, .5);
@@ -1565,12 +1626,12 @@ function* bossFight() {   /* ATTEMPT 1: the rookie barely scratches him; the sig
   yield* engage(b);
   { const c = cardHit(b, 22); yield* chop(b, c.v, c.o); }
   yield* until(() => !(b.stun > 0));
-  yield* bossSig(kind, 44, { kb: .25 }); yield* wait(.35);
+  yield* bossSig(kind, 44, { kb: .14 }); yield* wait(.3);
   yield* engage(b);
   for (let i = 0; i < 2; i++) { const c = cardHit(b, 22); yield* chop(b, c.v, c.o); }
   yield* until(() => !(b.stun > 0));
   /* the signature again, bigger: the rookie's shield goes up, it is not enough */
-  yield* bossSig(kind, 99, { lethal: true, wind: .75, throwBack: .15, guard: true });
+  yield* bossSig(kind, 99, { lethal: true, wind: .75, throwBack: .1, guard: true });
   yield* until(() => !hero.alive);
 }
 function* fallen() {   /* the loss: slow-mo, the knight topples, the world drains of colour, the target's poster slams back: BOUNTY STILL OPEN */
@@ -1601,11 +1662,11 @@ function* gearScreen() {
   for (let k = 4; k <= 10; k++) { G.tier = k; G.flash = .32; G.flashC = '#fff3c4'; G.tick = W.t; sfx('card', .55, .9 + k * .05); W.coins = Math.round(c0 * (1 - (k - 3) / 8));
     for (let i = 0; i < 6; i++) G.mot.push({ a: Math.random() * 6.283, r: 90 + Math.random() * 70, t: 0, life: .5 + Math.random() * .3 });
     yield* wait(.14); }
-  const old = G.c, nc = new CC2D.Char(rig, SK.obsidian, { x: 0, y: 0, scale: SC * 1.18, face: 1 }); applyShape(nc, 'obsidian', rig); nc.play('Attack Main Hand 3', { loop: false, blend: 0, onEnd: () => nc.play('Idle', { loop: true, blend: .2 }) });
+  const old = G.c, nc = new CC2D.Char(rig, SK.obsidian, { x: 0, y: 0, scale: SC * 1.18, face: 1 }); applyShape(nc, 'obsidian', rig); nc.play('Idle', { loop: true, blend: 0, start: old.t || 0 }); nc.t = old.t; old.speed = 1; nc.speed = 1;
   G.ghost = { c: old, t0: W.t }; G.c = nc; G.tier = 11; G.flash = .7; G.flashC = '#d9c2ff'; G.tick = W.t; G.purple = W.t; W.coins = 0; tintSlash('#C9B6F2');
   for (let i = 0; i < 26; i++) G.mot.push({ a: Math.random() * 6.283, r: 80 + Math.random() * 120, t: -Math.random() * .3, life: .7 + Math.random() * .4, p: 1 });
   sfx('final', .9); sfx('healing', .8); QA.events.push('gear');
-  yield* wait(.95); G.ghost = null;
+  yield* wait(.65); G.ghost = null; nc.play('Attack Main Hand 3', { loop: false, blend: .1, onEnd: () => nc.play('Idle', { loop: true, blend: .2 }) }); yield* wait(.3);
   /* TRY AGAIN: waits for the player */
   go = false; button('retry', g.x, g.by, 280, 92, () => { go = true; }); G.btn = { k: 'TRY AGAIN', sub: 'ATTEMPT 2', t0: W.t }; setHand(g.x + 50, g.by + 20);
   QA.stage = 'retry'; yield* until(() => go); clearButtons(); setHand(null); QA.picks.push('retry'); QA.events.push('retry'); G.btn.out = W.t; QA.stage = 'gear';
@@ -1623,8 +1684,8 @@ function drawGear() {
     txt(G.tier >= 11 ? 'NOW GO BACK FOR HIM' : 'SPEND THE GOLD · GO BACK STRONGER', LW / 2, g.title + 50, PORT ? 23 : 27, B, '#ffe6a8', '#2a0a04', 5); }
   /* the hunter */
   const m0 = ctx.getTransform(); ctx.save(); ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.beginPath(); ctx.ellipse(g.x, g.fy + 3, 70, 12, 0, 0, 6.283); ctx.fill(); ctx.restore();
-  const put = c => { c.step(dt); c.x = g.x; c.y = 0; c.world(); c.bounds(); c.y = g.fy - c.bot; CC2D.V = [m0.a, 0, 0, m0.d, m0.e, m0.f]; };
-  if (G.ghost) { const k = cl((W.t - G.ghost.t0) / .6, 0, 1); put(G.ghost.c); G.ghost.c.alpha = 1 - k; G.ghost.c.draw(ctx); G.ghost.c.alpha = 1; put(G.c); G.c.alpha = k; G.c.draw(ctx); G.c.alpha = 1; }
+  const put = c => { c.step(dt); c.x = g.x; c.y = 0; const sb = soleY(c); c.y = g.fy - (sb == null ? 0 : sb); CC2D.V = [m0.a, 0, 0, m0.d, m0.e, m0.f]; };
+  if (G.ghost) { const k = cl((W.t - G.ghost.t0) / .6, 0, 1); put(G.c); G.c.draw(ctx); put(G.ghost.c); G.ghost.c.alpha = (1 - k) * .85; G.ghost.c.draw(ctx); G.ghost.c.alpha = 1; }   /* same anchor, same pose: the old gear ghosts out exactly over the new */
   else { put(G.c); G.c.draw(ctx); }
   scr();
   /* golden motes spiral into him on every tier */
@@ -1654,38 +1715,45 @@ function* attempt2() {
   hero = F_('hero', 'obsidian', b.ch.x - meleeDist(b) - .8 * HH, 1, 160); hero.lvl = 30; hero.tier = TIER1; hero.ch.play('Idle', { loop: true, blend: 0 });
   W.focus = b; W.fit = true; W.snap = true; cam = hero.ch.x - LW * .3; W.a2T = W.gt; W.bossBar = { f: b, t0: W.t, label: T.name + ' · ATTEMPT 2' }; W.head = { s: 'ATTEMPT 2', t0: W.t };
   let t = .3; while (t > 0) { t -= yield; W.fade = Math.max(0, t / .3); } W.fade = 0;
+  W.swingP = .72; W.props = []; W.tasks = [];
   yield* engage(b);
-  /* the very attack that killed him: the tell, the shield comes up, it HOLDS; then the bash shoves the target back */
-  yield* bossSig(kind, 0, { block: true, wind: .7, kb: .1 }); yield* wait(.08);
-  yield* bash(b, Math.round(b.max * .05), .18);
+  /* the very attack that killed him: the tell, the shield comes up, it HOLDS; the bash comes straight back and shoves the target */
+  yield* bossSig(kind, 0, { block: true, wind: .7, kb: .15, fast: true }); yield* wait(.04);
+  yield* bash(b, Math.round(b.max * .05), .2);
   yield* engage(b);
   { const c = cardHit(b, Math.round(b.max * .12)); yield* chop(b, c.v, c.o); }
-  W.rage = 100; yield* wait(.2); yield* cardPick(1);
+  W.rage = 100; yield* wait(.15); yield* cardPick(1);
   yield* engage(b);
+  { const c = cardHit(b, Math.round(b.max * .16)); yield* chop(b, c.v, c.o); }
+  /* he swings again: the Obsidian Knight takes it without a flinch and keeps chopping */
+  if (b.alive) { yield* until(() => !(b.stun > 0)); yield* bossSig(kind, 14, { shrug: true, wind: .45, fast: true }); yield* wait(.08); yield* engage(b); }
   while (b.alive) { const c = cardHit(b, Math.round(b.max * .2)); let v = c.v, o = c.o;
-    if (b.hp - v < b.max * .3) { v = b.hp; o = Object.assign({}, o, { crit: true }); const prev = o.extra; o.extra = () => { if (prev) prev(); W.slow = .28; W.slowT = .75; sfx('death-final', .9, .8); }; }
+    if (b.hp - v < b.max * .3) { v = b.hp; o = Object.assign({}, o, { crit: true }); const prev = o.extra; o.extra = () => { if (prev) prev(); W.slow = .3; W.slowT = 1.1; sfx('death-final', .9, .8); }; }
     yield* chop(b, v, o); }
-  yield* wait(.75);
+  W.swingP = null;
+  yield* wait(.85);
 }
 function drawHead() {   /* one short headline (ATTEMPT 2) between the boss bar and the numbers */
   const h = W.head; if (!h) return; const u = W.t - h.t0; if (u < 0) return; if (u > .95) { W.head = null; return; } scr();
   const k = E.back(cl(u / .3, 0, 1)), a = u > .7 ? (.95 - u) / .25 : 1, y = PORT ? 262 : 290, sz = PORT ? 54 : 58; ctx.font = sz + 'px ' + B; const w = ctx.measureText(h.s).width;
   reg('head', LW / 2 - w / 2 - 6, y - sz * .55, LW / 2 + w / 2 + 6, y + sz * .55, h.s); ctx.save(); ctx.globalAlpha = a; ctx.translate(LW / 2, y); ctx.scale(k, k); goldText(h.s, 0, 0, sz); ctx.restore();
 }
-function* claimed() {
-  QA.stage = 'claimed'; W.bossBar = null; W.callout = null; W.pops.length = 0; sfx('final', .8); const T = W.target; W.tray = null;
-  W.victoryT = 0; let v = 0; while (v < .75) { const dt = yield; v += dt; W.victoryT = v; }
-  let t = 0; while (t < .18) { t += yield; W.fade = t / .18; }
-  W.victoryT = null; QA.stage = 'payoff'; W.scene = 'board'; W.zoom = 1; W.rageOn = false; W.track = false; W.redEdge = false; BOARD.on = true; BOARD.wait = false; BOARD.pick = null; BOARD.flyer = null; BOARD.regions = false; BOARD.hero = null;
-  BOARD.title = '+' + T.reward + ' GOLD'; BOARD.sub = 'BOUNTY PAID'; BOARD.tA = W.t + .05;
+function* claimed() {   /* mirrors the death: the SAME poster slams back to centre, CLAIMED lands over the portrait with a shake, then the gold, then the board */
+  QA.stage = 'claimed'; W.bossBar = null; W.callout = null; const T = W.target; W.tray = null; W.rageOn = false;
+  for (const p of W.pops) if (p.world) p.life = Math.min(p.life, p.t + .15);
+  const P = mkPoster(T.id, T.skin, T.name, T.reward); P.live = false; P.atkT = 99; W.cold = { p: P, t0: W.t, text: null }; sfx('PUNCH_2', .9, .8);
+  let t = 0; while (t < .25) { t += yield; W.dim = .45 * cl(t / .25, 0, 1); }
+  yield* wait(.12); P.stamp = W.t; sfx('PUNCH_0', 1, .7); sfx('final', .8); QA.events.push('stamp');
+  yield* wait(.45); { const Z = W.zoom || 1; coinFly(cam + (LW / 2) / Z, GYT + (440 - GYT) / Z, 12, T.reward); } W.coins += T.reward; sfx('COIN', .9); sfx('chest', .6); QA.events.push('chest');
+  yield* wait(.75);
+  t = 0; while (t < .18) { t += yield; W.fade = t / .18; }
+  W.cold = null; W.dim = 0; QA.stage = 'payoff'; W.scene = 'board'; W.zoom = 1; W.track = false; W.redEdge = false; BOARD.on = true; BOARD.wait = false; BOARD.pick = null; BOARD.flyer = null; BOARD.regions = false; BOARD.hero = null;
+  BOARD.title = ''; BOARD.sub = '';
   const ids = ['headless', 'skull', 'golem'];   /* every poster stays where the player tapped it */
-  BOARD.posters = ids.map(id => { const P = TARGETS[id]; const p = mkPoster(id, P.skin, P.name, P.reward); p.slam = W.t - 1; return p; });
-  const pi = ids.indexOf(T.id), L = boardLayout();
-  W.bchest = { t0: W.t - .3, open: W.t + .05, x: LW / 2, y: PORT ? 930 : L.top + L.ph + 150 };
-  while (t > 0) { t -= yield; W.fade = Math.max(0, t / .18); }
-  sfx('chest', .9); sfx('COIN', .8); W.coins += T.reward; coinFly(W.bchest.x + cam, W.bchest.y - 70, 12, T.reward); burst(W.bchest.x, W.bchest.y - 70, 30, '#ffd45a', 360, false); QA.events.push('chest');
-  yield* wait(.3); BOARD.posters[pi].stamp = W.t; BOARD.posters[pi].live = false; yield* wait(.12); sfx('PUNCH_2', 1, .7); QA.events.push('stamp');
-  yield* wait(.45); BOARD.posters[pi].drop = W.t; sfx('slice', .7, .6);
+  BOARD.posters = ids.map(id => { const Q = TARGETS[id]; const p = mkPoster(id, Q.skin, Q.name, Q.reward); p.slam = W.t - 1; if (id === T.id) { p.stamp = W.t - 1; p.live = false; } return p; });
+  const pi = ids.indexOf(T.id);
+  while (t > 0) { t -= yield; W.fade = Math.max(0, t / .18); } W.fade = 0;
+  yield* wait(.3); BOARD.posters[pi].drop = W.t; sfx('slice', .7, .6);
   yield* wait(.3); const nw = mkPoster('wood', 'wood_spirit', 'WOOD SPIRIT', 1200); nw.region = 'DARK FOREST'; nw.slam = W.t - 1; nw.flip = W.t; nw.glow = '#9dff8a';
   BOARD.posters[pi] = nw; BOARD.title = 'NEW BOUNTY!'; BOARD.sub = 'WOOD SPIRIT · 1200 GOLD'; BOARD.tA = W.t; sfx('card', .9, 1.2); QA.events.push('woodspirit');
   yield* wait(TEMPO.payoffHold); QA.stage = 'end';
@@ -1701,7 +1769,7 @@ function frame(dtReal) {
   if (W.slowT > 0) { W.slowT -= dtR; if (W.slowT <= 0) W.slow = 1; }
   let dtG = dtR * W.slow; if (W.stop > 0) { W.stop -= dtR; dtG = 0; } if (W.pause) dtG = 0; lastDtG = dtG; W.gt += dtG;
   /* player in control: prompts wait indefinitely (no auto-tap, no idle demo) */
-  stepCo(W.pause ? dtR : dtG); if (W.side) W.side(); if (W.side2) W.side2(); stepAI(dtG);
+  stepCo(W.pause ? dtR : dtG); if (W.tasks && W.tasks.length && !W.pause) W.tasks = W.tasks.filter(g => !g.next(dtG).done); if (W.side) W.side(); if (W.side2) W.side2(); stepAI(dtG);
   for (let i = W.later.length - 1; i >= 0; i--) if (W.gt >= W.later[i].t) { const L = W.later[i]; W.later.splice(i, 1); L.f(); }
   for (const f of foes) if (f.enterEnd != null && W.gt - f.enterEnd > .5) { f.entering = false; f.enterEnd = null; }
   if (W.cold) stepPoster(W.cold.p, dtR); for (const p of BOARD.posters) stepPoster(p, dtR); if (BOARD.hero) BOARD.hero.c.step(dtR);
@@ -1717,7 +1785,7 @@ function frame(dtReal) {
   W.redEdge = !!(hero && hero.alive && W.scene === 'fight' && hero.hp / hero.max < .4);
   for (const f of all) if (f.fadeW != null && f.fadeW < 1) { f.fadeW = Math.min(1, f.fadeW + dtG / (f.alive ? .3 : .14)); const a = 1 - f.fadeW; f.ch.slotAlpha = {}; for (const n of ['Weapon R', 'Weapon L', 'Shield F', 'Shield B']) f.ch.slotAlpha[slotIx[n]] = a; }
   for (const f of all) { const c = f.ch;
-    if (f.dieAt != null && W.gt >= f.dieAt) { f.dieAt = null; if (!f.boss && (QA.stage === 'hunt' || QA.stage === 'cold')) W.postKill = { f, until: 1e9 }; LIE.fall(c, { dur: f.boss ? .45 : T6.FALL, forward: !!f.boss }); if (f.skin === 'golem') { const bi = n => rig.nodes.findIndex(q => q.name === n); for (const n of ['Bone_Upper Arm L', 'Bone_Upper Arm R']) c.rotAdd[bi(n)] = 170; for (const n of ['Bone_Lower Arm L', 'Bone_Lower Arm R']) c.rotAdd[bi(n)] = 0; for (const n of ['Bone_Foot L', 'Bone_Foot R']) c.rotAdd[bi(n)] = 80; } if (f.boss && hero.alive) { hero.kb = -Math.max(0, (f.standH || 380) * (f.skin === 'golem' ? 1.6 : 1.35) - (f.ch.x - hero.ch.x) + 40); hero.kbSpd = 720; if (!hero.busy) hero.ch.play('Shield Ready', { loop: false, blend: .1 });   /* a guarded step back: the body never lands on him */ } f.lieT = W.gt; if (false) { const bi = n => rig.nodes.findIndex(q => q.name === n); for (const n of ['Bone_Upper Arm L', 'Bone_Upper Arm R']) c.rotAdd[bi(n)] = 170; for (const n of ['Bone_Foot L', 'Bone_Foot R']) c.rotAdd[bi(n)] = 80; } }
+    if (f.dieAt != null && W.gt >= f.dieAt) { f.dieAt = null; if (!f.boss && (QA.stage === 'hunt' || QA.stage === 'cold')) W.postKill = { f, until: 1e9 }; if (f === hero) { W.slow = .5; W.slowT = .65; dropProps(hero); } LIE.fall(c, { dur: f === hero ? .3 : f.boss ? .5 : T6.FALL, forward: !!f.boss }); if (f.skin === 'golem') { const bi = n => rig.nodes.findIndex(q => q.name === n); for (const n of ['Bone_Upper Arm L', 'Bone_Upper Arm R']) c.rotAdd[bi(n)] = 170; for (const n of ['Bone_Lower Arm L', 'Bone_Lower Arm R']) c.rotAdd[bi(n)] = 0; for (const n of ['Bone_Foot L', 'Bone_Foot R']) c.rotAdd[bi(n)] = 80; } f.lieT = W.gt; if (false) { const bi = n => rig.nodes.findIndex(q => q.name === n); for (const n of ['Bone_Upper Arm L', 'Bone_Upper Arm R']) c.rotAdd[bi(n)] = 170; for (const n of ['Bone_Foot L', 'Bone_Foot R']) c.rotAdd[bi(n)] = 80; } }
     if (c.lie) { const was = c.lie.t >= c.lie.dur; LIE.step(c, dtG); if (!was && c.lie.t >= c.lie.dur) { const big = f.boss; doShake(big ? 22 : 7); if (big) { hitStop(.06); ringFx((f.lft + f.rgt) / 2, GY - 10, 2); sfx('PUNCH_0', 1, .4); }
         for (let x = f.lft; x < f.rgt; x += 50) dust(x, big ? 8 : 4, big ? 240 : 140); if (f.skin === 'golem') crack(f.ch.x + 60); }
       if (c.lie.done && f.restT == null) { f.restT = W.gt; } } }   /* corpses stay down for good */
@@ -1730,23 +1798,24 @@ function frame(dtReal) {
       if (fw && !inW(hero.lastHitT) && !inW(hero.lastBlockT) && !inW(f.swingHitT)) { const o = Math.min(fw.r, hb.r) - Math.max(fw.l, hb.l), oy = Math.min(fw.b, hb.b) - Math.max(fw.t, hb.t); if (o > 2 && oy > 2) push = Math.max(push, o + 3); }
       if (hw && !inW(f.lastHitT) && !inW(hero.swingHitT)) { const o = Math.min(hw.r, fb.r) - Math.max(hw.l, fb.l), oy = Math.min(hw.b, fb.b) - Math.max(hw.t, fb.t); if (o > 2 && oy > 2) push = Math.max(push, o + 3); }
       if (push > 0) { hero.ch.x -= Math.min(push, 40); ground(hero); W.pushT = W.gt; } } }
+  stepProps(dtG);
   for (const p of W.fx) { p.t += dtG; if (p.k === 'p') { p.x += p.vx * dtG; p.y += p.vy * dtG; p.vy += 900 * dtG; if (p.world && p.y > GY + 8) { p.y = GY + 8; p.vy *= -.25; p.vx *= .6; } } }
   for (let i = W.fx.length - 1; i >= 0; i--) if (W.fx[i].t > W.fx[i].life) W.fx.splice(i, 1);
   for (const p of W.pops) p.t += dtG; while (W.pops.length && W.pops[0].t > W.pops[0].life) W.pops.shift();
   ambient(dtG, false);
   if (W.scene === 'fight' || W.iris != null) {
     /* camera: the knight >= 8 % inside the left edge; with a focus (a target, a boss, a falling golem) the frame also holds it, pulling back (zoom) if it must */
-    const SA = 16; let l = Math.min(hero.lft - 40, hero.ch.x - 100) - Math.max(SA, LW * .08); let zt = 1, r = null;
+    const SA = 16; let l = Math.min(hero.lft - 12, hero.ch.x - 70) - SA / (W.zoom || 1); let zt = 1, r = null;
 
     const set = [W.focus, ...(W.bossBar && boss && boss.alive ? [boss] : []), ...foes.filter(f => f.alive && !f.boss && !f.queued && !f.offFrame), ...foes.filter(f => !f.alive && !(f.vanish > 0) && f.ch.x > hero.ch.x && f === W.focus)].filter(f => f && !f.offFrame && !(f.boss && f.alive && QA.stage === 'hunt' && !f.entering && !f.pill));
     for (const f of set) { const ex = f.entering && f.destX != null ? f.destX - f.ch.x : 0;   /* an entering boss is framed where it will stop, so the camera is ready when it arrives */
-      const pb = f.alive && f.boss && !f.entering ? pxBox(f.ch, 'all') : null; const rr = ex + (f.alive ? (pb ? Math.max(pb.r, f.rgt) + 10 : Math.max(f.rgt, f.ch.x + 40) + (f.boss ? (f.skin === 'skel_chief' ? 125 : 95) : 60)) : (f.boss ? f.rgt + 10 : Math.max(f.rgt, f.ch.x + (f.standH || 300) * 1.15) + 20)) + SA / Math.min(1, W.zoom || 1);   /* the safe margin is in screen px: it grows in world px as the camera pulls back */ r = r == null ? rr : Math.max(r, rr); }
+      const pb = f.alive && f.boss && !f.entering ? pxBox(f.ch, 'all') : null; const rr = ex + (f.alive ? (pb ? Math.max(pb.r, f.rgt) + 10 : Math.max(f.rgt, f.ch.x + 40) + (f.boss ? (f.skin === 'skel_chief' ? 125 : 95) : 60)) : (f.boss ? Math.max(f.rgt, (pxBox(f.ch, 'all') || { r: 0 }).r) + 10 : Math.max(f.rgt, f.ch.x + (f.standH || 300) * 1.15) + 20)) + SA / Math.min(1, W.zoom || 1);   /* the safe margin is in screen px: it grows in world px as the camera pulls back */ r = r == null ? rr : Math.max(r, rr); }
     const hpb = pxBox(hero.ch, 'all'), hL = hpb ? Math.min(hpb.l, hero.lft) : hero.lft;
     if (W.focus && W.focus.alive && !W.focus.offFrame && !W.focus.queued) l = Math.max(l, hL - (W.fit ? SA + 4 : SA + 10) / (W.zoom || 1));   /* in a fight the knight may sit closer to the left edge (still inside the safe area) */
     const fm = !W.fit && W.focus && W.focus.alive && !W.focus.boss && !W.focus.entering && !W.focus.offFrame ? W.focus : null;
     const fmb = fm ? pxBox(fm.ch, 'all') : null, fmr = fmb ? Math.max(fmb.r, fm.rgt) + Math.max(0, fm.kb || 0) : 0;
     if (fm) { const rr = fmr + SA + 28; zt = cl(LW / (rr - l), .86, 1); }   /* hunt: the engaged minion's far edge stays inside the safe edge (at most a 7 % pull-back) */
-    if (r != null && W.fit) zt = cl(LW / (r - l), (hero && !hero.alive) || (boss && !boss.alive) ? .5 : QA.stage === 'attempt2' && W.gt - (W.a2T || 0) < 1.2 ? .62 : W.target && W.target.id === 'golem' ? (/^(boss|claimed|attempt2|card2)$/.test(QA.stage) ? .725 : .786) : /^(claimed|attempt2|card2)$/.test(QA.stage) ? .74 : .85, 1); else if (r != null && !fm) zt = 1;   /* game-true camera: zoom 1 in the hunt; the boss fight may pull back to 0.85 */
+    if (r != null && W.fit) zt = cl(LW / (r - l), hero && !hero.alive ? .5 : boss && !boss.alive ? .68 : QA.stage === 'attempt2' && W.gt - (W.a2T || 0) < 1.0 ? .64 : W.target && W.target.id === 'golem' ? .7 : .84, 1); else if (r != null && !fm) zt = 1;   /* game-true camera: zoom 1 in the hunt; the boss fight may pull back to 0.85 */
     const pk = PORT && W.postKill && W.gt < W.postKill.until; if (pk || (PORT && QA.stage === 'cold')) zt = Math.min(zt, .92);
     const ctr = W.camMode === 'center'; if (ctr) zt = 1;   /* the fallen / revived / geared-up hunter, centred at 28 % */   /* just after a kill: slide the knight left and pull back a touch so the body lies in frame */
     W.zoom = W.snap ? zt : (W.zoom || 1) + (zt - (W.zoom || 1)) * Math.min(1, dtR * (zt < (W.zoom || 1) ? 30 : fm ? 18 : 10));   /* pull back fast, push in gently */ const Z = W.zoom, VW = LW / Z;
@@ -1762,6 +1831,7 @@ function frame(dtReal) {
     for (const f of foes) if (f.enterTill != null && f.alive) { const bb = pxBox(f.ch, 'all'); if (!bb || W.gt - f.enterTill > .8 || ((bb.r - cam) * Z <= LW - 16 && (bb.l - cam) * Z >= 16)) { f.entering = false; f.enterTill = null; } }
     if (ctr && boss && boss.alive && !boss.offFrame) { if ((boss.lft - 220 - cam) * Z > LW) { boss.offFrame = true; boss.entering = false; } else boss.entering = true; }   /* the target slides out of frame on the right as the camera turns to the hunter */
     if (boss && boss.offFrame && boss.alive && !boss.noPark) boss.ch.x = Math.max(boss.ch.x, cam + VW + (boss.ch.x - boss.lft) + 160);   /* the parked target stays out of frame however far the knight walks */ if (boss) W.mapP = (hero.ch.x - 0) / (boss.ch.x - 200);
+    if (W.iris == null) { QA.zl = QA.zl || {}; const s = QA.stage; if (QA.zl[s] == null || W.zoom < QA.zl[s]) QA.zl[s] = +W.zoom.toFixed(3); }
     W.numTop = GYT - (GYT - ((PORT ? (W.callout ? 400 : 270) : (W.callout ? 420 : 300)) + 46)) / Z; }
   for (const f of all) { if (!f.trail) f.trail = []; if (f.busy === 'atk' && f.alive && dtG > 0 && f.ch.eff[slotIx[f.trailSlot || 'Weapon R']]) { f.ch.world(); const tp = tipOf(f, f.trailSlot || 'Weapon R'); const L = f.trail[f.trail.length - 1];
       if (tp && (!L || Math.hypot(tp[0] - L.x, tp[1] - L.y) > 7)) f.trail.push({ x: tp[0], y: tp[1], t: W.gt }); else if (L && tp && Math.hypot(tp[0] - L.x, tp[1] - L.y) <= 7) f.trail.length = 0; }
@@ -1784,8 +1854,8 @@ function draw() {
       scr(); ctx.strokeStyle = 'rgba(255,220,140,' + (1 - W.iris) + ')'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(LW / 2, LH * .45, r, 0, 6.283); ctx.stroke(); }
     drawFlyer(); }
   else if (W.scene === 'gear') drawGear();
-  if (W.cold) { const c = W.cold, k = E.back(cl((W.t - c.t0) / .3, 0, 1)), out = c.out ? cl((W.t - c.out) / .3, 0, 1) : 0, pw = PORT ? Math.min(250, LW * .56) : 250, y = (PORT ? 362 : 300) - (1 - k) * 260;
-    drawPoster(c.p, LW / 2, y, pw, (.7 + .3 * k) * (1 - .15 * out), cl(k * 3, 0, 1) * (1 - out), { rot: -.04, stamp: c.p.stamp != null ? (W.t - c.p.stamp) / .2 : null, stampText: c.text });
+  if (W.cold) { const c = W.cold, shk = c.p.stamp != null ? Math.max(0, 1 - (W.t - c.p.stamp) / .3) : 0, k = E.back(cl((W.t - c.t0) / .3, 0, 1)), out = c.out ? cl((W.t - c.out) / .3, 0, 1) : 0, pw = PORT ? Math.min(250, LW * .56) : 250, y = (PORT ? 362 : 300) - (1 - k) * 260;
+    drawPoster(c.p, LW / 2 + Math.sin(W.t * 90) * 8 * shk, y + Math.cos(W.t * 77) * 5 * shk, pw, (.7 + .3 * k) * (1 - .15 * out), cl(k * 3, 0, 1) * (1 - out), { rot: -.04, stamp: c.p.stamp != null ? (W.t - c.p.stamp) / .2 : null, stampText: c.text });
     if (c.p.stamp != null && out < 1) { scr(); reg('head', LW / 2 - pw * .45, y - pw * .2, LW / 2 + pw * .45, y + pw * .4, (c.text || ['CLAIMED']).join(' ')); } }
   drawHud(); targetBanner(); drawCoins(); scr(); drawPops(false); drawCallout(); drawHead(); drawCards();
   if (W.victoryT != null) banner('victory', 'BOUNTY CLAIMED!', 'TARGET DOWN', W.victoryT, PORT ? 330 : 300);
