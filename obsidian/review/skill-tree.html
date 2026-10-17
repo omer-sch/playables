@@ -3929,7 +3929,7 @@ OK.start(CFG, async function (OK, C) {
     bgC.y = GY;
     OK.onLayout(L => { const k = L.portrait ? 1.5 : 1.9; bgC.scale.set(k); bgC.x = XS + 20 - DOORX * k; QA.bgk = k; }); }
   let landFY = 726, portFY = 700;
-  OK.cam.landFull = true; OK.cam.landExtra = 1.2; OK.cam.portraitZoom = 1.15 * .9;   /* round 2: portrait frames a little wider (was the boss-only zoom .9) */ OK.pace = 1; OK.onLayout(L => { OK.cam.focusY = L.portrait ? portFY : landFY; }); OK.relayout();
+  OK.cam.landFull = true; OK.cam.landExtra = 1.2; OK.cam.portraitZoom = 1.15 * .85;   /* round 2: portrait frames a little wider (was the boss-only zoom .9) */ OK.pace = 1; OK.onLayout(L => { OK.cam.focusY = L.portrait ? portFY : landFY; }); OK.relayout();
 
   /* ---------------- props (client Fight UI art); placed along his road when the tree unlocked them */
   const BACK = 62;   /* props stand behind the fight lane, against the wall */
@@ -3957,17 +3957,17 @@ OK.start(CFG, async function (OK, C) {
   /* ---------------- HUD (the game's dock, map, coins) */
   const HV = OK.buildHudV({ hero, levels: [60], map: { x0: XS, x1: XS + 1900, marks: [{ kind: 'boss', x: XS + 1700 }, { kind: 'chest', x: XS + 1900 }] } });
   HV.cap = true; if (HV.xT) HV.xT.visible = false; if (HV.xd) HV.xd.visible = false; if (HV.lvT) HV.lvT.visible = false; /* no rage count: in this ad the dock pays out only through the Skill Statue */ HV.setHp(hero); HV.settleIn(.05); window.__okdbg.HV = HV;
-  const camX = () => hero.x - (L.portrait ? 150 : OK.viewW() * 0.4);   /* round 2: portrait keeps 150 world units (~50 px + his back foot) behind the knight, also on recoil */
+  const camX = () => hero.x - (L.portrait ? 205 : OK.viewW() * 0.4);   /* round 2: portrait keeps 150 world units (~50 px + his back foot) behind the knight, also on recoil */
   OK.cam.x = camX();
   let camMode = 'hero';
   OK.onTick(() => {
     const vw = OK.viewW(); let tx = camX();
-    if (camMode === 'boss') tx = L.portrait ? hero.x - 162 : (hero.x + boss.x) / 2 - vw / 2;   /* portrait: knight and his plate stay >= 16 px inside the left edge */
+    if (camMode === 'victory') tx = hero.x - (L.portrait ? 200 : 228);   /* the whole body in frame, knight >= ~50 px from the left */
+    else if (camMode === 'boss') tx = L.portrait ? hero.x - 205 : (hero.x + boss.x) / 2 - vw / 2;   /* portrait: knight and his plate stay >= 16 px inside the left edge */
     OK.cam.x += (tx - OK.cam.x) * (hero.walking && camMode === 'hero' ? 0.24 : 0.12); 
   });
-  OK.onTick(() => { if (hero.alive && !hero.walking && !hero.busy) OK.clearBodies(hero.x - 190, hero.x - 5); });
+  /* round 2b: bodies are never faded or cleared; they lie a little UP the lane (see killFx), so the knight's road stays clear */
   const walk = OK.sfxLoop('walk', .4); OK.onTick(() => { if (hero.walking && hero.alive && !QA.treeOpen) walk.start(); else walk.stop(); });
-  OK.onTick(() => { for (const k of (OK._corpses || [])) if (!k.gone && !k.a.c.destroyed && k.x < OK.cam.x + 110) { k.gone = true; OK.killTweens(k.a.c); tween(k.a.c, { alpha: 0 }, .25, 'linear').then(() => { k.a.c.visible = false; }); } });
 
   /* ---------------- state: what the tree unlocked */
   const S = { hp: false, potion: false, anvil: false, fountain: false, statue: false, dmg: false, potionUsed: false, shock: false, pips: 0 };
@@ -4018,14 +4018,16 @@ OK.start(CFG, async function (OK, C) {
     sfx('card', .45, 1.2);
   }
   /* ---------------- combat (auto-fight; every red number == what the bar loses) */
-  let currentWave = [], floorHp = 3;
+  let currentWave = [], floorHp = 3, killN = 0, bodyX = -1e9;
   function killFx(e) {
     const hx = e.x, hy = e.y - e.h * 0.5;
     OK.shake(.32); OK.hitStop(.07); sfx('death-' + (1 + Math.floor(Math.random() * 3)), .6);
     fx.burst(hx, hy, 14, 0xa3100f, { speed: 200, r: 8 }); fx.burst(hx, hy, 8, 0xffd35a, { speed: 160, r: 5 });
     wait(.1).then(() => { HV.coins(3, { x: hx, y: GY - 20 }, 3); });
-    e.die();
-    { const under = OK.actors.some(o => o !== e && o !== hero && o.alive && o.c.visible && o.x > e.x + 10 && o.x < e.x + 215); if (under) { const k = (OK._corpses || []).find(k => k.a === e); if (k) k.gone = true; tween(e.c, { alpha: 0 }, .3, 'linear', { delay: .3 }).then(() => { e.c.visible = false; }); } }
+    /* round 2b (bodies stay, the knight never steps on one): the blow throws the foe back and UP the lane (toward the wall),
+       alternating two depths so bodies never stack; he lies there, opaque, for the rest of the ad. The knight walks the front of the lane. */
+    e.keepBody = true; e.zBias = -400; killN++; const o = { y: e.y, x: e.x }, ty = GY - 74, tx = Math.max(e.x + 40, bodyX + 310); bodyX = tx;   /* round 3b (critic): every body gets its own floor spot, one body-length from the last, on the same floor line (never floating, never piled) */   /* against the wall, well clear of the lane the knight walks */
+    e.die(); tween(o, { y: ty, x: tx }, .42, 'outCubic', { onUpdate: () => { e.y = o.y; e.x = o.x; } });
   }
   function crescent(a, col, thin, rk) {
     if (a._cr && OK.G.real - a._cr < .2) return; a._cr = OK.G.real;
@@ -4087,9 +4089,9 @@ OK.start(CFG, async function (OK, C) {
   function drinkPotion() {
     if (!S.potion || S.potionUsed || !hero.alive) return; S.potionUsed = true;
     const p = OK.sprite('potion'); p.x = hero.x + 70; p.y = hero.y - C.heroH * .62; p.scale.set(.3); OK.layers.fxWorld.addChild(p);
-    tween(p.scale, { x: 1.25, y: 1.25 }, .2, 'outBack').then(() => tween(p, { rotation: -1.1, x: hero.x + 34, y: hero.y - C.heroH * .9 }, .2, 'outQuad')).then(() => wait(.25)).then(() => tween(p, { alpha: 0 }, .2, 'linear')).then(() => p.destroy());
+    tween(p.scale, { x: 1.25, y: 1.25 }, .2, 'outBack').then(() => tween(p, { rotation: -1.1, x: hero.x + 34, y: hero.y - C.heroH * .9 }, .2, 'outQuad')).then(() => wait(.12)).then(() => tween(p, { alpha: 0 }, .15, 'linear')).then(() => p.destroy());
     if (flask) { flask.texture = OK.tx('potionEmpty'); slotC.alpha = .6; const k = slotC.scale.x; }
-    wait(.22).then(() => healFx(Math.min(potHeal(), hero.maxHp - hero.hp), 'potion'));
+    wait(.7).then(() => healFx(Math.min(potHeal(), hero.maxHp - hero.hp), 'potion'));   /* round 2b: the heal ring comes after the flask has gone, never on it */
   }
   function barPop() { if (!hero._fill) return; const f = hero._fill, t0 = f.tint; f.tint = 0x8cff9c; wait(.5).then(() => { f.tint = 0xffffff; }); }
   /* armour from the anvil: one 44 px shield badge with a count at the left end of his HP plate; each count takes one whole hit */
@@ -4104,7 +4106,7 @@ OK.start(CFG, async function (OK, C) {
     setPips(S.pips - 1);
     fx.spark(hero.x + 70, hero.y - C.heroH * .56, 1, true, 0xd6ecff); fx.ring(hero.x + 55, hero.y - C.heroH * .56, 0x9fc8ff, 20, 150, .3);
     if (blockT && !blockT.destroyed) { OK.killTweens(blockT); blockT.destroy(); }
-    blockT = fx.number(hero.x - (L.portrait ? 20 : 30), hero.y - C.heroH - 54, 'BLOCKED', { size: (L.portrait ? 56 : 72) * (big ? 1.2 : 1), fill: big ? 0xe6f2ff : 0xb9c6d6, stroke: 0x1d2c44, hold: big ? 1.0 : .8, life: .3, pop: big ? 1.6 : 1.2 });
+    blockT = fx.number(hero.x - (L.portrait ? 95 : 30), hero.y - C.heroH - 54, 'BLOCKED', { size: (L.portrait ? 56 : 72) * (big ? (L.portrait ? 1.05 : 1.2) : 1), fill: big ? 0xe6f2ff : 0xb9c6d6, stroke: 0x1d2c44, hold: big ? 1.0 : .8, life: .3, pop: big ? 1.6 : 1.2 });
     if (big) { fx.ring(hero.x + 40, hero.y - C.heroH * .5, 0xbfe0ff, 30, 330, .45); OK.fx.flash(0xcfe6ff, .12, .2); OK.hitStop(.1); flashTile('anvil'); }
     sfx('PUNCH_1', .6, 1.8); OK.shake(big ? .5 : .12); hero.flash({ white: .12, rgb: [.6, .8, 1] }); callout('anvil');
   }
@@ -4116,7 +4118,7 @@ OK.start(CFG, async function (OK, C) {
     hero.flash({ white: .14, rgb: [1, .45, .4] }); fx.blood(hero.x + 40, hero.y - C.heroH * .55, -1);
     OK.shake(.28); sfx('PUNCH_' + (Math.random() * 3 | 0), .6);
     { const kb = hero.v; OK.killTweens(kb); tween(kb, { x: -14, rotation: 0 }, .08, 'outQuad').then(() => wait(.08)).then(() => tween(kb, { x: 0, rotation: 0 }, .3, 'outBack')); }
-    if (S.potion && !S.potionUsed && hero.hp <= hero.maxHp * .35) wait(.3).then(drinkPotion);
+    if (S.potion && !S.potionUsed && hero.hp <= hero.maxHp * .35) wait(.85).then(drinkPotion);   /* round 2b: the flask waits until the damage number has faded */
   }
   /* archers: draw (bow-shot), release, a code-drawn arrow flies to him */
   function flyArrow(a, onLand) {
@@ -4131,21 +4133,20 @@ OK.start(CFG, async function (OK, C) {
      idle and facing him, archers at the back; the knight walks up to each one and the exchange starts when he arrives.
      Portrait keeps every standing foe either fully in frame or fully out of it (the archer waits beyond the edge until he comes for her). */
   function placeWave(list, b) { const g = L.portrait ? 125 : 215;
-    list.forEach((e, i) => { e.homeX = e.x = b + i * g + (e.opt.ranged ? (L.portrait ? 190 : 110) : 0); e.c.visible = true; e.barAlways = false; e.face = -1; }); }
+    list.forEach((e, i) => { e.homeX = e.x = b + i * g + (e.opt.ranged ? (L.portrait ? 235 : 110) : 0); e.c.visible = true; e.barAlways = false; e.face = -1; }); }
   async function fightWave(list, dmg, arrow, minBase, placed) {
     currentWave = list.slice();
     if (!placed) placeWave(list, Math.max(minBase || 0, hero.x + (L.portrait ? 330 : 560)));
     /* an archer looses one arrow when the knight stands within her range and she is fully on screen */
     /* round 2: she looses her arrow as soon as she is wholly on screen and the knight is still >= 260 away (never point-blank) */
     const onScreen = a => { const r = a.c.getBounds(); return r.x + r.width <= L.vw - 14 * L.u && r.x >= 0; };
-    for (const a of list) if (a.opt.ranged) a._shot = until(() => !a.alive || !hero.alive || (onScreen(a) && a.x - hero.x >= 260 && a.x - hero.x < (L.portrait ? 520 : 760) && !hero.busy))
-      .then(() => (a.alive && hero.alive && arrow) ? shoot(a, () => heroTakes(arrow)) : null);
+    for (const a of list) if (a.opt.ranged) a._shot = until(() => !a.alive || !hero.alive || (onScreen(a) && a.x - hero.x >= 260 && a.x - hero.x < (L.portrait ? 520 : 760)))
+      .then(() => { a._started = true; return (a.alive && hero.alive && arrow) ? shoot(a, () => heroTakes(arrow)) : null; });
     for (const e of list) {
       if (!e.alive) continue;
       if (e.opt.ranged && arrow) {   /* round 2 (critic): he stops ~300 short of the archer, takes the arrow, then closes in */
-        const narrow = L.portrait && OK.viewW() < 620; if (narrow) OK.zoomTo(.88, .5);   /* a touch wider for this beat so she is whole while he is still far */
-        await hero.moveTo(Math.max(hero.x, e.homeX - 300), C.run); e.barAlways = true; await e._shot; await wait(.1);
-        await hero.moveTo(Math.max(hero.x, e.homeX - C.engage), C.run);
+        const narrow = L.portrait && OK.viewW() < 600; if (narrow) OK.zoomTo(.94, .5);   /* a touch wider for this beat so she is whole while he is still far */
+        e.barAlways = true; await hero.moveTo(Math.max(hero.x, e.homeX - 300), C.run); if (!e._started) await e._shot; await hero.moveTo(Math.max(hero.x, e.homeX - C.engage), C.run); await e._shot;   /* round 3b: he keeps walking while she draws; the arrow lands mid-step, then he closes in */
         while (e.alive) { const dead = await heroStrike(e); if (dead || !e.alive) break; await wait(.15); }
         if (narrow) OK.zoomTo(1, .7); await wait(.15); continue;
       }
@@ -4276,7 +4277,7 @@ OK.start(CFG, async function (OK, C) {
         const o = N[id]; if (done || busy) return;
         if (o.state !== 'available') { if (pts > 0) { hand.hide(); wait(.8, true).then(() => { if (!busy && !done) pointHand(); }); } if (o.state !== 'unlocked') { const x0 = pos(o.n)[0]; tween(o.c, { x: x0 + 9 }, .05, 'linear', { real: true }).then(() => tween(o.c, { x: x0 - 9 }, .08, 'linear', { real: true })).then(() => tween(o.c, { x: x0 }, .05, 'linear', { real: true })); sfx('CLICK', .4, .7); } return; }
         busy = true; hand.hide(); pts -= o.n.cost; QA.points = pts; QA.unlocked.push(id); QA.events.push('node:' + id); S[id] = true;
-        cntT.text = String(pts); { const k0 = cnt._k0 || 1; OK.killTweens(cnt.scale); cnt.scale.set(k0 * 1.25); tween(cnt.scale, { x: k0, y: k0 }, .3, 'outBack', { real: true }); }
+        cntT.text = String(pts); fxT.text = pts > 0 ? 'SPEND ' + pts + (pts === 1 ? ' POINT' : ' POINTS') : 'ENTER THE DUNGEON'; fxT.style.fill = 0xffffff; place(); { const k0 = cnt._k0 || 1; OK.killTweens(cnt.scale); cnt.scale.set(k0 * 1.25); tween(cnt.scale, { x: k0, y: k0 }, .3, 'outBack', { real: true }); }
         const p = pos(o.n); const f2 = OK.sprite('spFist'); f2.width = f2.height = 76; f2.x = cnt.x - 66 * cnt.scale.x; f2.y = cnt.y; fxC.addChild(f2); sfx('CLICK', .5, 1.2);
         await tween(f2, { x: p[0], y: p[1] }, .32, 'inOutSine', { real: true }); f2.destroy();
         o.state = 'unlocked'; refresh(); o.on.alpha = 0; tween(o.on, { alpha: 1 }, .18, 'linear', { real: true });
@@ -4318,27 +4319,28 @@ OK.start(CFG, async function (OK, C) {
   if (S.anvil) { roadX += STEP; smith.x = roadX; smith.visible = true; }
   if (S.statue) { roadX += STEP; statue.x = roadX; statue.visible = true; }
   placeWave(wave2, roadX + (L.portrait ? 400 : 560));
-  { const last = wave2[wave2.length - 1]; boss.x = last.homeX + (L.portrait ? 560 : 640); boss.c.visible = true; boss.face = -1; if (boss.bar) boss.bar.x = L.portrait ? -20 : 55; }
+  { const last = wave2[wave2.length - 1]; boss.x = last.homeX + (L.portrait ? 700 : 640); boss.c.visible = true; boss.face = -1; if (boss.bar) boss.bar.x = L.portrait ? -20 : 55; }
   /* round 2 (critic: Thorn half off the edge in the pan): he steps out of the dark only once he is wholly on screen */
-  boss.c.alpha = 0; until(() => { const r = boss.c.getBounds(); return QA.stage !== 'run2' && r.x + r.width <= L.vw - 10 * L.u; }).then(() => { tween(boss.c, { alpha: 1 }, .35, 'outQuad'); fx.burst(boss.x, GY - 30, 14, 0x3a4250, { speed: 110, r: 10, gravity: -20 }); });   /* portrait: his plate sits under him, fully on screen */   /* Thorn already stands at the end of the corridor */
+  /* round 3b (critic: Thorn faded in from nothing): he already stands, opaque, in the lane; the camera simply reaches him */
   OK.cam.x = camX(); OK.layers.dim.alpha = 0; HV.show('map', true); HV.show('coins', true);
   dockNodes(QA.unlocked.slice());
   await wait(.2, true); await tween(T, { alpha: 0 }, .35, 'linear', { real: true }); T.visible = false;
   if (S.hp) { callout('hp'); hero.barKX = 1; hero._barSet = true; if (hero.bar) hero.bar.x = L.portrait ? 22 : -64; tween(hero, { barKX: L.portrait ? 1.15 : 1.2 }, .4, 'outBack'); fx.ring(hero.x, hero.y - C.heroH * .5, 0xff6a5a, 20, 260, .45); sfx('shout-1', .5); barPop(); }
   if (S.potion) showFlask();
-  await wait(S.hp || S.potion ? .7 : .3);   /* round 3: the first callout is read before he moves */
-  if (S.anvil) {   /* the anvil stands by the wall on his road: armour before the fight */
-    await hero.moveTo(smith.x - Math.max(150, smith.width / 2 + 95), C.run); sfx('PUNCH_1', .7, 1.7); fx.spark(smith.x - 30, GY - BACK - 150, 1, true, 0xffe066); OK.shake(.2);
-    setPips(2); callout('anvil'); fx.ring(hero.x, hero.y - C.heroH * .5, 0x9fc8ff, 20, 240, .45); await wait(.6); smith._gone = true; await wait(.2);   /* used: the anvil fades, the lane ahead is clear */
+  await wait(S.hp || S.potion ? .2 : .1);   /* round 3b (critic: stop-start): the first callout lands as he sets off; every prop is passed at a run, nothing is waited for */
+  const passing = (x, fn) => until(() => hero.x >= x || QA.stage !== 'run2' && QA.stage !== 'fight2').then(fn);
+  if (S.anvil) {   /* the anvil stands by the wall on his road: he runs past it and takes the armour on the move */
+    passing(smith.x - Math.max(150, smith.width / 2 + 95), () => { sfx('PUNCH_1', .7, 1.7); fx.spark(smith.x - 30, GY - BACK - 150, 1, true, 0xffe066); OK.shake(.2);
+      setPips(2); callout('anvil'); fx.ring(hero.x, hero.y - C.heroH * .5, 0x9fc8ff, 20, 240, .45); wait(.8).then(() => { smith._gone = true; }); });
   }
-  if (S.statue) {   /* the skill statue grants the skill for this run: his next blow hits every foe */
-    await hero.moveTo(statue.x - Math.max(150, statue.width / 2 + 95), C.run); sfx('shout-1', .6);
-    const ic = OK.sprite('sk_Every4thHitHitsAll'); ic.x = statue.x; ic.y = GY - BACK - 400; ic.scale.set(.2); OK.layers.fxWorld.addChild(ic);
-    await tween(ic.scale, { x: .8, y: .8 }, .35, 'outBack'); await wait(.5);
-    await tween(ic, { x: hero.x, y: hero.y - C.heroH * .55, alpha: .2, 'scale.x': .3, 'scale.y': .3 }, .45, 'inOutSine'); ic.destroy();
-    flashTile('statue'); sfx('card', .6); fx.ring(hero.x, hero.y - C.heroH * .5, 0x7fd6ff, 20, 280, .45); S.shock = true;
-    { const g = OK.softGlow(); g.width = 300; g.height = 400; g.tint = 0x7fd6ff; g.alpha = .35; g.y = -C.heroH * .45; hero.c.addChildAt(g, 0); let t = 0; OK.onTick(dt => { t += dt; g.alpha = S.shock ? .28 + .12 * Math.sin(t * 5) : Math.max(0, g.alpha - dt * 2); }); }
-    statue._gone = true; await wait(.5);
+  if (S.statue) {   /* the skill statue grants the skill for this run as he passes: his next blow hits every foe */
+    passing(statue.x - Math.max(150, statue.width / 2 + 95), () => { sfx('shout-1', .6); S.shock = true;
+      const ic = OK.sprite('sk_Every4thHitHitsAll'); ic.x = statue.x; ic.y = GY - BACK - 400; ic.scale.set(.2); OK.layers.fxWorld.addChild(ic);
+      tween(ic.scale, { x: .8, y: .8 }, .3, 'outBack').then(() => wait(.2)).then(() => { const sx = ic.x, sy = ic.y, o = { k: 0 };
+        return tween(o, { k: 1 }, .45, 'inOutSine', { onUpdate: () => { ic.x = sx + (hero.x - sx) * o.k; ic.y = sy + (hero.y - C.heroH * .55 - sy) * o.k; ic.alpha = 1 - .8 * o.k; ic.scale.set(.8 - .5 * o.k); } }); })
+        .then(() => { ic.destroy(); flashTile('statue'); sfx('card', .6); fx.ring(hero.x, hero.y - C.heroH * .5, 0x7fd6ff, 20, 280, .45); });
+      { const g = OK.softGlow(); g.width = 300; g.height = 400; g.tint = 0x7fd6ff; g.alpha = .35; g.y = -C.heroH * .45; hero.c.addChildAt(g, 0); let t = 0; OK.onTick(dt => { t += dt; g.alpha = S.shock ? .28 + .12 * Math.sin(t * 5) : Math.max(0, g.alpha - dt * 2); }); }
+      wait(.5).then(() => { statue._gone = true; }); });
   }
   /* fight 2: two bandits and an archer; the lane starts clear of the last prop */
   let XF2 = 0;
@@ -4350,7 +4352,9 @@ OK.start(CFG, async function (OK, C) {
     /* the fountain: only if the tree unlocked it. He stops well short of it (sword clear), it heals him to full */
     if (S.fountain) {
       /* round 4: the fountain pops in SOLID beside him first, then heals (ring + the bar rising), holds, and leaves in a sparkle. Never translucent while it works. */
-      XF2 = hero.x + (L.portrait ? 262 : 330); fountain.x = XF2; fountain.texture = OK.tx('fountain'); fountain._manual = true; fountain.visible = true; fountain.alpha = 1; OK.clearBodies(XF2 - 520, XF2 + 240);
+      XF2 = Math.max(hero.x + (L.portrait ? 262 : 330), wave2[wave2.length - 1].x + 400);   /* round 2b: beyond the last body, never on it */
+      if (XF2 - (L.portrait ? 262 : 330) > hero.x + 4) await hero.moveTo(XF2 - (L.portrait ? 262 : 330), C.run);
+      fountain.x = XF2; fountain.texture = OK.tx('fountain'); fountain._manual = true; fountain.visible = true; fountain.alpha = 1; 
       QA.stage = 'fountain';
       const sx = fountain.scale.x, sy = fountain.scale.y; fountain.scale.set(sx * .25, sy * .25); sfx('card', .5);
       await tween(fountain.scale, { x: sx, y: sy }, .25, 'outBack'); await wait(.12);
@@ -4365,12 +4369,13 @@ OK.start(CFG, async function (OK, C) {
   S.reserve = 0;
   /* Thorn: he stops a full blade away (never over the knight's face or sword arm), on floor clear of props and bodies */
   QA.stage = 'boss'; HV.bossPulse(true);
-  const bx = boss.x, heroBX = bx - C.bossEngage; OK.clearBodies(heroBX - 120, bx + 420);
+  const bx = boss.x, heroBX = bx - (L.portrait ? 235 : C.bossEngage);
   hero._barSet = true;
   if (S.dmg) { boss.maxHp = boss.hp = 72; boss.onHpChange(); }   /* x2 builds: the same number of exchanges */
   if (L.portrait && OK.cam.zoom !== 1) OK.zoomTo(1, .6);
   await hero.moveTo(heroBX, C.run);   /* round 3: the knight walks up to Thorn, who waits for him */
   boss.barAlways = true; camMode = 'boss';
+  await until(() => boss.c.alpha > .97);   /* round 2b: Thorn is fully there before his name lands and before the first swing */
   sfx('shout-2', .7); OK.shake(.35); fx.burst(bx, GY - 10, 12, 0x4a5a6b, { speed: 120, r: 8 });
   fx.slam('THORN!', { size: 96, fill: 0xff5a3a, at: .3, hold: 1.3 }); await wait(.3);   /* the name stays 1.3 s; his first blow comes while it is up */
   hero.reach = 60; boss.reach = 34;
@@ -4387,8 +4392,8 @@ OK.start(CFG, async function (OK, C) {
       fx.number(boss.x + (L.portrait ? 120 : 175), boss.y - C.bossH * .56, String(d), { size: S.dmg ? 96 : 72, fill: 0xff4a36, pop: S.dmg ? 1.6 : 1.4, align: 'left' });
       if (S.dmg) { fx.ring(boss.x, boss.y - C.bossH * .5, 0xff8a3a, 20, 240, .32); OK.fx.flash(0xfff2b0, .09, .14); callout('dmg'); }
       sfx('slice', .6); sfx('PUNCH_' + (i % 3), .5); OK.shake(last ? .7 : S.dmg ? .5 : .3); OK.hitStop(last ? .14 : S.dmg ? .1 : .06);
-      if (last) { QA.stage = 'victory'; OK.G.slow = .45; sfx('death-final', .8); OK.fx.flash(0xfff2b0, .16, .3); boss.barAlways = false; boss.v.rotation = 0; { const x0 = boss.c.x; boss.c.x = x0 + (L.portrait ? 150 : 175); boss.die(); boss.c.x = x0;   /* the killing blow throws him back, clear of the knight; the camera does not move */
-        if (L.portrait) tween(boss.c, { alpha: 0 }, .3, 'linear', { real: true, delay: .75 }); }   /* portrait: a phone frame is narrower than his lying body, so he dissolves as he lands (nothing cut by the edge, nothing on the knight's boots) */
+      if (last) { QA.stage = 'victory'; OK.G.slow = .45; sfx('death-final', .8); OK.fx.flash(0xfff2b0, .16, .3); boss.barAlways = false; boss.v.rotation = 0; { boss.keepBody = true; boss.zBias = -400; const o = { x: boss.x }; boss.die(); tween(o, { x: boss.x + (L.portrait ? 25 : 110) }, .45, 'outCubic', { onUpdate: () => { boss.x = o.x; } });   /* round 2b: the killing blow throws him back; his body STAYS */
+        if (L.portrait) { camMode = 'victory'; OK.zoomTo(.95, .8); } }   /* portrait: the camera eases out so his whole body lies in frame beside the knight */
       wait(.8, true).then(() => { OK.G.slow = 1; }); }
     } });
     if (!boss.alive) break;
@@ -4397,7 +4402,7 @@ OK.start(CFG, async function (OK, C) {
       await boss.attack(hero, { onStrike: foeSwoosh(boss), onHit: () => { if (S.pips > 0) { blocked = true; blockHit(true); } else { drank = S.potion && !S.potionUsed; OK.fx.flash(0xff3020, .16, .25); heroTakes(bossDmg()); } } });
       if (blocked) { await wait(.95);   /* round 2: BLOCKED is read and gone before the next blow lands */   /* anvil builds: the block holds once, then Thorn's second blow lands */
         await boss.attack(hero, { onStrike: foeSwoosh(boss), onHit: () => { drank = S.potion && !S.potionUsed; OK.fx.flash(0xff3020, .16, .25); heroTakes(bossDmg()); } }); }
-      await wait(drank ? .55 : .25); }
+      await wait(drank ? 1.5 : .25); }
   }
   /* VICTORY (client flag); when it has left, Thorn's body fades and the chest lands on clear floor and bursts. No CTA here. */
   await wait(.25, true);
@@ -4407,9 +4412,9 @@ OK.start(CFG, async function (OK, C) {
   OK.onLayout(placeV); { vc._pk = 1.5; placeV(); tween(vc, { _pk: 1 }, .25, 'outBack', { real: true, onUpdate: placeV }).then(() => { OK.shake(.2); }); }
   sfx('final', .7); fx.stars(hero.x, hero.y - C.heroH - 30, 10, { spread: 200 });
   await wait(1.05, true);
-  QA.stage = 'chest'; tween(boss.c, { alpha: 0 }, .25, 'linear', { real: true }).then(() => { boss.c.visible = false; });
+  QA.stage = 'chest';   /* round 2b: Thorn's body stays */
   await tween(vc, { alpha: 0 }, .25, 'linear', { real: true }); vc.visible = false;
-  { chest.x = Math.min(hero.x + (L.portrait ? 270 : 340), OK.cam.x + OK.viewW() - 150); chest.visible = true; const y0 = chest.y; chest.y = y0 - 320; chest.alpha = 0; tween(chest, { alpha: 1 }, .1); sfx('chest', .4, 1.4);
+  { chest.x = Math.min(boss.x + (L.portrait ? 140 : 340), OK.cam.x + OK.viewW() - 100); chest.y = GY - (L.portrait ? 112 : 62); chest.zIndex = boss.c.zIndex - 2; chest.visible = true; const y0 = chest.y;   /* round 2b: the chest lands BEHIND Thorn's body (up the lane), never on it */ chest.y = y0 - 320; chest.alpha = 0; tween(chest, { alpha: 1 }, .1); sfx('chest', .4, 1.4);
     await tween(chest, { y: y0 }, .3, 'inQuad'); OK.shake(.18); fx.burst(chest.x, y0 - 6, 14, 0x4a5a6b, { speed: 160, r: 8, gravity: 40 });
     await wait(.15); await tween(chest, { rotation: .07 }, .05); await tween(chest, { rotation: -.07 }, .06); chest.rotation = 0;
     chest.texture = OK.tx('chestBOpen'); sfx('chest', .8); HV.use(HV.marks[1]);

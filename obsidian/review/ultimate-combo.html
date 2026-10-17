@@ -3093,14 +3093,15 @@ OK.makeRig = function (skin, opt) {
       const cl = v => dir > 0 ? Math.max(vx0 + 70, Math.min(vx1 - 185, v)) : Math.max(vx0 + 185, Math.min(vx1 - 70, v));   // the whole lying body stays inside the frame
       for (const th of [15, -25, 60, -70, 105, -115, 150, 195]) { const lx = cl(this.x + dir * th);   // either side: never onto the living (110), never onto a body (120)
         if (OK._corpses.every(k => k.gone || Math.abs(k.x - lx) >= 165) && allActors.every(o => o === this || !o.alive || !o.c.visible || o.keepBody || Math.abs(o.x - lx) >= 110)) { land = lx; break; } }
-      if (land == null && dir > 0 && this.x + 15 > vx1 - 185) land = vx1 + 130;   // Hits-All knockback: the last body flies out of frame ahead (it is passed later, lying in the row)
+      if (land == null && !OK.bodiesStay && dir > 0 && this.x + 15 > vx1 - 185) land = vx1 + 130;   /* r3 r3: with bodiesStay the body lands inside the frame (never flies out and fades) */   // Hits-All knockback: the last body flies out of frame ahead (it is passed later, lying in the row)
       if (land == null && OK.bodiesStay) {   /* r3 r2: bodies never fade -- take the spot furthest from the other bodies (and clear of the living) */
         let best = -1; for (const th of [15, -25, 60, -70, 105, -115, 150, 195]) { const lx = cl(this.x + dir * th); if (!allActors.every(o => o === this || !o.alive || !o.c.visible || o.keepBody || Math.abs(o.x - lx) >= 90)) continue; const dmin = Math.min(9999, ...OK._corpses.filter(k => !k.gone).map(k => Math.abs(k.x - lx))); if (dmin > best) { best = dmin; land = lx; } }
-        if (land == null) land = cl(this.x + dir * 15); }
+        if (land == null) land = cl(this.x + dir * 15);
+        if (best < 150 && dir > 0) land = vx1 + 140; }   /* r3 r3: no free spot in frame -- the body is knocked clear out of frame ahead and lies there (passed later); never stacked, never faded */
       if (land == null) { land = cl(this.x + dir * 15);   // no free spot in frame: the older body under it leaves (never two bodies stacked)
         for (const k of OK._corpses) if (!k.gone && Math.abs(k.x - land) < 120) { k.gone = true; killTweens(k.a.c); tween(k.a.c, { alpha: 0 }, .32, 'linear').then(() => { k.a.c.visible = false; }); } }
       OK._corpses.push({ x: land, t: now, a: this });
-      tween(this.c, { x: land }, .4, 'outCubic'); if (land > OK.cam.x + OK.viewW()) tween(this.c, { alpha: 0 }, .28, 'linear');   // knocked out of frame: it fades as it flies (never a half body at the edge)
+      tween(this.c, { x: land }, .4, 'outCubic'); if (!OK.bodiesStay && land > OK.cam.x + OK.viewW()) tween(this.c, { alpha: 0 }, .28, 'linear');   // knocked out of frame: it fades as it flies (never a half body at the edge)
     }
     await wait(0.5 / dts);
     if (this.keepBody) { await wait(0.5 / dts); return; }
@@ -3911,7 +3912,7 @@ OK.start(CFG, async function (OK, C) {
   OK.onLayout(L => { OK.cam.focusY = L.portrait ? 700 : 726; }); OK.relayout();
 
   // ---------------- world plan (x)
-  const W1 = 1000, W2 = 1950, W3 = 2900, XG = 3850, XA = 3850;   /* v15: ~950 px between beats (1.5 s of running), XG = Thorn's two guards at the arena's edge */          // waves 1-3, the arena's front line
+  const W1 = 1000, W2 = 1820, W3 = 2640, XG = 3460, XA = 3460;   /* r3 r3: ~820 px between beats (length toward 44 s) */   /* v15: ~950 px between beats (1.5 s of running), XG = Thorn's two guards at the arena's edge */          // waves 1-3, the arena's front line
   const GAPW = () => L.portrait ? 118 : 230;   /* v4: kill -> next hit toward the game's ~1.3 s */                 // wave spacing (foes wait beyond where the previous body lies)
   const GAPA = () => L.portrait ? 150 : 330;   /* portrait: a tighter row so the army reads in one frame (zoomed out) */                 // arena row: the game's ~1.05 hero-heights in landscape; tighter in portrait
   // ---------------- the Grimwood arena: the client's Background_DarkForest plate fades in over the road as she enters
@@ -4035,12 +4036,13 @@ OK.start(CFG, async function (OK, C) {
     { const ww = t.width + (icon ? t.height * .7 : 0), gap = 44 / L.ws; let moved = true, n = 0;   /* r3 r2: stacked numbers never touch (>= 44 px apart) */
       while (!o.noStack && moved && n++ < 6) { moved = false; for (const c of OK.layers.fxWorld.children) { if (!c.isNum || c.destroyed || c.alpha < .3) continue; const cw = c.width;
         if (Math.abs(c.x - x) < (cw + ww) / 2 + 8 && Math.abs(c.y - y) < Math.max(c.height, t.height) * .5 + gap * .5) { const up = c.y - Math.max(c.height, t.height) * .5 - gap * .5 - t.height * .5; y = up > yTop ? up : c.y + Math.max(c.height, t.height) * .5 + gap * .5 + t.height * .5; moved = true; } } } }
+    { const hw = (t.width + (icon ? t.height * 1.3 : 0)) / 2 + 14 / L.ws; x = Math.max(OK.cam.x + hw, Math.min(OK.cam.x + OK.viewW() - hw, x)); }   /* r3 r3: never cut by the screen edge */
     t.x = x; t.y = y; t.isNum = true; OK.layers.fxWorld.addChild(t);
     if (icon) { const ic = OK.sprite(icon), h = t.height * .58; ic.width = ic.height = h; ic.x = (o.side || 1) * (t.width / 2 + h * .62); t.addChild(ic); }
     t.scale.set(1.35); tween(t, { 'scale.x': 1, 'scale.y': 1 }, .16, 'outBack'); tween(t, { y: y - (o.rise == null ? 30 : o.rise), alpha: 0 }, o.fade || .32, 'inQuad', { delay: o.hold == null ? .42 : o.hold }).then(() => t.destroy());
     return t;
   }
-  const tag = (t, key) => { if (!t || t.destroyed) return t; const ic = OK.sprite(key), h = t.height / t.scale.y * .58;   /* a small tag, as in the game */ ic.width = ic.height = h; const sx = (t.x - OK.cam.x) * L.ws, side = sx + (t.width / 2 + h * 1.3) * L.ws > L.vw - 12 ? -1 : 1; ic.x = side * (t.width / 2 / t.scale.x + h * .62); ic.y = 0; t.addChild(ic); return t; };   /* real game: 8 [icon][icon] */
+  const tag = (t, key, force) => { if (!t || t.destroyed) return t; const ic = OK.sprite(key), h = t.height / t.scale.y * .58;   /* a small tag, as in the game */ ic.width = ic.height = h; const sx = (t.x - OK.cam.x) * L.ws, side = sx + (t.width / 2 + h * 1.3) * L.ws > L.vw - 44 ? -1 : 1; const sd = force || side;   /* r3 r3: wider margin (the camera may still be settling) */ ic.x = sd * (t.width / 2 / t.scale.x + h * .62); ic.y = 0; t.addChild(ic); return t; };   /* real game: 8 [icon][icon] */
   const foeSwoosh = e => () => crescent(e, 0xf4f7ff, true, .42);
   function killFx(e) {
     const hx = e.x, hy = e.y - e.h * 0.5;
@@ -4059,13 +4061,15 @@ OK.start(CFG, async function (OK, C) {
   }
   function heroTakes(d) { if (hero.hurt) hero.hurt(arguments[0] || 0);
     const lost = Math.min(d, Math.max(0, hero.hp - 6)); hero.hp -= lost; HV.setHp(hero);
-    if (lost > 0) numAt(hero.x + (L.portrait ? (L.vh / L.vw < 1.9 ? 34 : 0) : 10), hero.y - C.heroH * (L.portrait && L.vh / L.vw < 1.9 ? .84 : 1.08), '-' + lost, 58, 0xffffff, null, { stroke: 0x9a0000 });
+    const sp = L.portrait && L.vh / L.vw < 1.9, cmbOn = /finale|finisher/.test(QA.stage || '');   /* r3 r3: never on her face; on short screens in the combo the HIT COMBO count sits above her -> beside her head, toward Thorn */
+    if (lost > 0) numAt(hero.x + (L.portrait ? (sp && cmbOn ? 84 : 0) : 10), hero.y - C.heroH * (sp && cmbOn ? .86 : 1.08), '-' + lost, 58, 0xffffff, null, { stroke: 0x9a0000 });
     hero.flash({ white: .14, rgb: [1, .45, .4] }); fx.blood(hero.x + 40, hero.y - C.heroH * .55, -1); OK.shake(.25); sfx('PUNCH_' + (Math.random() * 3 | 0), .55);
     const kb = hero.v; OK.killTweens(kb); tween(kb, { x: -24, rotation: 0 }, .08, 'outQuad').then(() => wait(.08)).then(() => tween(kb, { x: 0, rotation: 0 }, .3, 'outBack'));
   }
   function dodge() {                                        // she leans out of the arrow's way (the game's dodge), DODGE! over her
     const kb = hero.v; OK.killTweens(kb); tween(kb, { x: -22, y: -8, rotation: 0 }, .1, 'outQuad').then(() => wait(.12)).then(() => tween(kb, { x: 0, y: 0, rotation: 0 }, .3, 'outBack'));
-    dodge.t = num(hero.x - (L.portrait ? 0 : 60), hero.y - C.heroH - (L.portrait ? 40 : 10), 'DODGE!', { size: 52, fill: 0xd6ecff, stroke: 0x1d4a8a, hold: 1.0, pop: 1.2 }); sfx('CLICK', .4, 1.6);
+    const spD = L.portrait && L.vh / L.vw < 1.9 && /finale|finisher/.test(QA.stage || '');   /* r3 r3: short screens in the combo: beside her head (the HIT COMBO count is above her) */
+    dodge.t = num(hero.x + (spD ? 30 : L.portrait ? 0 : -60), hero.y - C.heroH * (spD ? .34 : 1) - (spD ? 0 : L.portrait ? 40 : 10), 'DODGE!', { size: 52, fill: 0xd6ecff, stroke: 0x1d4a8a, hold: 1.0, pop: 1.2 }); sfx('CLICK', .4, 1.6);
   }
   function potionPop() {                                    // pick 2b: the dodge refills her potions (client potion art) and she drinks one
     const p = OK.sprite('potion'); p.x = hero.x + 8; p.y = hero.y - C.heroH * .5; p.scale.set(.15); OK.layers.fxWorld.addChild(p);
@@ -4174,10 +4178,12 @@ OK.start(CFG, async function (OK, C) {
   const z0 = OK.cam.zoom; let heroRest = HX0 - 230, zF = z0, walkSpd = C.run;   /* run v2: >= 0.6 s of visible running to the waiting pair; never below the speed where feet stay planted */
   if (L.portrait) {   /* r3 r2: she stands back and visibly RUNS ~0.5 s up to the waiting bandit; the archer waits further back (revealed as she comes); wave 1 is framed whole */
     const m = wave1[0], ar = wave1[1]; ar.homeX = ar.x = m.homeX + 190; const heroF = m.homeX - C.engage, vw = OK.viewW();
-    const needF = (m.homeX + 95) - (heroF - 340 - 85) + 20; if (needF > vw) zF = Math.max(minZoom(), z0 * vw / needF);   /* start frame: her (340 px back) + the waiting bandit */
-    const vwF = vw * z0 / zF; heroRest = heroF - Math.max(200, Math.min(340, vwF - 380));
+    const needF = (m.homeX + 95) - (heroF - 340 - 85) + 20; if (needF > vw) zF = Math.max(minZoom() * .86, z0 * vw / needF);   /* r3 r3: the forest plate allows a wider opening frame than the arena (bottom = the plate's own dark foreground) */   /* start frame: her (340 px back) + the waiting bandit */
+    /* r3 r3: the start frame is solved in SCREEN px -- her plate (58 px left of her) and the bandit + plate (45 px right of him) both >= 20 px inside the edges; the rest is visible running */
+    const wsb = L.ws / OK.cam.zoom, wsF = wsb * zF, PL = Math.max(70 * wsb, 50 * wsF) + 20, PR = Math.max(50 * wsb, 65 * wsF) + 20, span = (L.vw - PL - PR) / wsF;
+    heroRest = heroF - Math.max(180, Math.min(340, span - C.engage));
     if (zF < z0 - .001) OK.zoomTo(zF, .01);
-    camMode = 'start'; camFocus = () => (m.homeX + 95) - OK.viewW() / 2; }
+    camMode = 'start'; camFocus = () => { const ws = L.ws, l = heroRest - PL / ws, r = m.homeX + PR / ws; return (l + r) / 2; }; }
   hero.moveTo(heroRest, C.run * 1.1);   /* run v2: the game's run speed (no sprint-in) */
   /* v23: no practice swing at the air (Omer) */
   await OK.startScreen({ quest: 'BUILD AN EPIC COMBO\nAND DEFEAT THORN!', portrait: 'thornPortrait', name: 'THORN', questAt: .45, teaseAt: 1.1, tapAt: 2.2, onTease: () => HV.bossPulse(true) });
@@ -4188,7 +4194,8 @@ OK.start(CFG, async function (OK, C) {
   QA.stage = 'run1';
   await until(() => !hero.busy && !hero._move);
   if (camMode === 'start') { const m = wave1[0], ar = wave1[1]; camFocus = () => ((m.homeX - C.engage - 105) + (ar.homeX + 95)) / 2; }   /* portrait: the camera opens onto the whole waiting pair as she runs */
-  { const m = wave1[0]; await hero.moveTo(m.homeX - C.engage, walkSpd); await wait(.15); }   /* r3: she walks up to the waiting pair */
+  if (L.portrait && OK.cam.zoom < minZoom() - .001) OK.zoomTo(minZoom(), .55);   /* r3 r3: the wide opening frame closes in as she runs (no dark band in the fight) */
+  { const m = wave1[0]; await hero.moveTo(m.homeX - C.engage, L.portrait ? 480 : walkSpd); await wait(.15); }   /* r3: she walks up to the waiting pair */
   await comboPick(0);
   QA.stage = 'wave1';
   await until(() => !praiseC || praiseC.destroyed || QA.t - (praise._t || 0) >= .85);   /* r3 r2: 'NICE CHOICE!' is read (1.2 s+) before her first blow's banner replaces it */
@@ -4219,7 +4226,7 @@ OK.start(CFG, async function (OK, C) {
       wave3.forEach(e => { if (!e.alive) return; e.hit(21, { big: true }); numAt(e.x + 6, e.y - e.h - 46, '21', 62, 0xffe14a); fx.ring(e.x, e.y - e.h * .55, 0x7fd6ff, 20, 120, .3); });
       wait(.12).then(() => wave3.forEach((e, i) => wait(i * .08).then(() => { if (e.hp <= 0 && e.alive) killFx(e); })));
     } });
-    await wait(.9);
+    await wait(.6);   /* r3 r3: length */
   } else await fightWave(wave3, 5);
   await HV.settle();
   await comboPick(2);
@@ -4259,7 +4266,7 @@ OK.start(CFG, async function (OK, C) {
     const t = OK.text('UNLEASH COMBO', { size: 74, fill: 0xffffff, stroke: 0x5a1e04, sw: 8 }); t.y = -4; if (t.width > 470) t.scale.set(470 / t.width);
     c.addChild(glow, b, t); c.eventMode = 'static'; c.cursor = 'pointer'; c.hitArea = new P.Rectangle(-280, -100, 560, 200);
     const place = () => { if (c.destroyed) return; const s = L.portrait ? L.u : L.u * .76; c.scale.set(s * (c._k || 1)); c.x = L.portrait ? L.vw / 2 : L.vw * .5; c.y = L.portrait ? L.vh * .855 : L.vh * .8;   /* landscape: on the dark foreground under the army, never over a fighter */
-      const g = c.getBounds(); QA.unleash = { x: g.x + g.width / 2, y: g.y + g.height / 2, w: g.width, h: g.height }; };
+      const g = b.getBounds(); QA.unleash = { x: g.x + g.width / 2, y: g.y + g.height / 2, w: g.width, h: g.height }; };   /* r3 r3: the button's own bounds (the glow made the hand point below the button in landscape -- a tap there missed) */
     c._k = .2; OK.onLayout(place); place(); tween(c, { _k: 1 }, .45, 'outElastic', { real: true, onUpdate: place }).then(place);
     let tt = 0; const pulse = (dt, dr) => { if (c.destroyed) return; tt += dr; if (c._k >= .99) { c._k = 1 + .05 * Math.sin(tt * 6); place(); } glow.alpha = .45 + .25 * Math.sin(tt * 6); }; OK.onTick(pulse);
     const hand = OK.hand(); wait(.2, true).then(() => { if (QA.unleashOpen) hand.pointAt(() => [{ x: QA.unleash.x + QA.unleash.w * .26, y: QA.unleash.y + QA.unleash.h * .22 }]); });   /* v24: a very fast tap no longer leaves the hand on screen */
@@ -4270,13 +4277,13 @@ OK.start(CFG, async function (OK, C) {
 
   // V5 -- THE FINALE: ONE combo, the same choreography on every path. The first blow lands right after the tap; each of the
   //       4 cards fires in turn (its slot lights, its proc shows), the army falls, then a 4-hit chain -- one hit per card -- ends Thorn.
-  QA.stage = 'finale'; camMode = 'arena'; if (praiseC && !praiseC.destroyed) { const pc = praiseC; OK.killTweens(pc); tween(pc, { alpha: 0 }, .15, 'linear', { real: true }); }   /* r3 r2: the pick praise clears as she unleashes (no orb flies across text) */
+  QA.stage = 'finale'; camMode = 'arena'; if (praiseC && !praiseC.destroyed && praiseC.alpha > .02) { const pc = praiseC; OK.killTweens(pc); tween(pc, { alpha: 0 }, .12, 'linear', { real: true }); await wait(.13, true); }   /* r3 r3: the praise is gone before the first orb flies (no orb over text) */   /* r3 r2: the pick praise clears as she unleashes (no orb flies across text) */
   sfx('card', .8); ROW.linkA = 1.4;
   const aura = OK.softGlow(); aura.tint = 0xffc84a; aura.blendMode = 'add'; aura.width = 320; aura.height = 460; aura.y = -C.heroH * .5; aura.alpha = 0; hero.c.addChildAt(aura, 0); tween(aura, { alpha: .55 }, .3);
   // v24 -- THE CHARGE: the four cards pour into her blade one after another, then the combo is released; a hit counter runs to the end
   const CMB = (() => { const c = new P.Container(); OK.layers.ui.addChild(c); const fr = new P.Graphics(); fr.blendMode = 'add'; c.addChild(fr); let tt = 0, n = 0, live = true;
     const ct = OK.text('0', { size: 104, fill: 0xffe14a, stroke: 0x3b1a07, sw: 10 }), cl = OK.text('HIT COMBO', { size: 30, fill: 0xffffff, stroke: 0x3b1a07, sw: 5 }); const cc = new P.Container(); cl.y = 64; cc.addChild(ct, cl); cc.alpha = 0; cc._k = 1; c.addChild(cc);
-    const place = () => { if (c.destroyed) return; const s = L.portrait ? L.u : L.u * .8; cc.scale.set(s * cc._k); cc.x = L.portrait ? L.vw * .17 : L.vw * .115; cc.y = L.portrait ? (ROW.bottom || L.vh * .27) + 150 * s : L.vh * .43; };
+    const place = () => { if (c.destroyed) return; const shortP = L.portrait && L.vh / L.vw < 1.9, s = L.portrait ? L.u * (shortP ? .8 : 1) : L.u * .8; cc.scale.set(s * cc._k); cc.x = L.portrait ? L.vw * (shortP ? .12 : .17) : L.vw * .115;   /* r3 r3: short portrait -- a smaller count tucked left, clear of the numbers over the row */ cc.y = L.portrait ? (ROW.bottom || L.vh * .27) + 150 * s : L.vh * .43; };
     OK.onLayout(place); place();
     OK.onTick((dt, dr) => { if (c.destroyed || !live) return; tt += dr || dt; const a = .6 + .4 * Math.sin(tt * 7), w = 30 * L.u, w2 = 9 * L.u; fr.clear();
       fr.rect(w / 2, w / 2, L.vw - w, L.vh - w).stroke({ width: w, color: 0xffa01a, alpha: .2 * a }); fr.rect(w2 / 2, w2 / 2, L.vw - w2, L.vh - w2).stroke({ width: w2, color: 0xffe9a0, alpha: .55 * a }); });
@@ -4304,7 +4311,8 @@ OK.start(CFG, async function (OK, C) {
   }
   const bossChip = (d, col, icon) => {                       // Thorn takes part of every big blow: his bar drops, he flinches
     if (!boss.alive) return; CMB.hit(); boss.hit(Math.min(d, boss.hp - 1), { big: true }); boss.flash({ white: .14, rgb: [1, .6, .4] });
-    numAt(boss.x - 125, boss.y - C.bossH * .98, String(d), 58, col || 0xffe14a, icon, { side: -1, hold: .4 });
+    if (L.portrait) numAt(boss.x - 4, boss.y - C.bossH * .52, String(d), 58, col || 0xffe14a, icon, { side: 1, hold: .4, onBoss: true, noStack: true });   /* r3 r3: portrait -- on Thorn's chest, clear of his face and the HIT COMBO count */
+    else numAt(boss.x - 125, boss.y - C.bossH * .98, String(d), 58, col || 0xffe14a, icon, { side: -1, hold: .4 });
     const kb = boss.v; OK.killTweens(kb); kb.rotation = 0; tween(kb, { x: 22 }, .07, 'outQuad').then(() => wait(.12)).then(() => tween(kb, { x: 0 }, .3, 'outQuad'));   /* r3: no tilt/overshoot (read as a pendulum) */
   };
   const strikeOn = async (e, d, o) => {                      // a lethal combo strike; o.num = the number text, o.icon = the card that fired
@@ -4312,7 +4320,8 @@ OK.start(CFG, async function (OK, C) {
     let dead = false;
     await hero.attack(e, { onStrike: () => crescent(hero, o.col || 0xffd04a, false, .45, true), onHit: () => {
       dead = e.hit(d, { big: true }); CMB.hit(); const tp = hero.bladeTip() || { x: e.x - 22, y: e.y - e.h * .5 }; fx.spark(tp.x, tp.y, 1, true, 0xffe066); fx.blood(tp.x + 8, tp.y, 1);
-      { const nt = num(e.x + 30, e.y - e.h - (L.portrait ? 62 : 80), o.num || String(d), { size: 70, fill: o.fill || 0xffe14a, align: 'left' }); if (o.icon) tag(nt, o.icon); }
+      { const pb = L.portrait && boss.alive && boss.c.visible && Math.abs(e.x - boss.x) < 160;   /* r3 r3: in front of Thorn the number sits over the man's own head, never on Thorn's face */
+        const nt = pb ? num(Math.min(e.x - 18, boss.x - 100), e.y - e.h - 92, o.num || String(d), { size: 64, fill: o.fill || 0xffe14a }) : num(e.x + 30, e.y - e.h - (L.portrait ? 62 : 80), o.num || String(d), { size: 70, fill: o.fill || 0xffe14a, align: 'left' }); if (o.icon && !(pb && Math.min(e.x - 18, boss.x - 100) + 108 > boss.x - 40)) tag(nt, o.icon, pb ? 1 : 0); }   /* r3 r3: the card icon goes on the side away from the HIT COMBO count; dropped when it would touch Thorn's face (the slot lights instead) */
       sfx('slice', .65); sfx('PUNCH_' + (Math.random() * 3 | 0), .55); OK.shake(.4); OK.hitStop(.08); HV.gain(1, { x: tp.x, y: tp.y });
       if (o.onHit) o.onHit();
       if (dead) killFx(e);
@@ -4334,7 +4343,7 @@ OK.start(CFG, async function (OK, C) {
     await hero.attack(a1, { onStrike: () => crescent(hero, 0x9fe6ff, false, .45, true), onHit: () => {
       slam('CRITICAL HIT ALL!', { size: 76, fill: 0x9fe6ff, stroke: 0x0c2a44, at: SA(), hold: .7 }); OK.shake(.6); OK.hitStop(.12); OK.fx.flash(0xcff4ff, .12, .2); sfx('shout-2', .6); sfx('slice', .7);
       [a1, a2, a3].forEach(e => { if (!e.alive) return; const d = e === a1 ? 21 : 7; e.hit(d, { big: true }); CMB.hit();
-        if (L.portrait) numAt(e === a1 ? e.x + 6 : e === a2 ? e.x - 34 : e.x + 14, e === a1 ? e.y - e.h * .66 : e.y - e.h * .5, String(d), 54, 0xffe14a, null, { noStack: true });   /* r3 r2: each number over its own man, apart, never on Thorn's face */
+        if (L.portrait) numAt(e === a1 ? e.x - 10 : e === a2 ? e.x - 26 : e.x, e === a1 ? e.y - e.h * 1.13 : e === a2 ? e.y - e.h * 1.2 : e.y - e.h * .3, String(d), 54, 0xffe14a, null, { noStack: true, onBoss: true });   /* r3 r3: a diagonal -- the back-left archer's 7 above his head, the front man's 21 above his, the archer behind Thorn's legs on his own body; none on a face */   /* r3 r2: each number over its own man, apart, never on Thorn's face */
         else numAt(e.x + 6, e.y - e.h - 42, String(d), 54, 0xffe14a); fx.ring(e.x, e.y - e.h * .55, 0x7fd6ff, 20, 120, .3); });
       bossChip(21, 0xffe14a, picked[1].icon); fx.ring(boss.x, boss.y - C.bossH * .55, 0x7fd6ff, 30, 170, .3);
       wait(.12).then(() => { if (a1.alive) killFx(a1); });
@@ -4350,7 +4359,7 @@ OK.start(CFG, async function (OK, C) {
     if (tg) await strikeOn(tg, 14, { num: '14', icon: picked[2].icon, onHit: () => {
       if (S.firstHeal) { heal(20, '+20 HP'); slam('HEALING STRIKE!', { size: 72, fill: 0x8cff9c, stroke: 0x0a3a14, at: SA(), hold: .6 }); }
       if (S.behind) { slam('BEHIND +400%!', { size: 72, fill: 0xb8ff6a, stroke: 0x1a3a05, at: SA(), hold: .6 });
-        if (bh && bh.alive) { bh.hit(bh.hp, { big: true }); CMB.hit(); numAt(bh.x + 24, bh.y - bh.h - 118, '35', 60, 0xb8ff6a, picked[2].icon); fx.ring(bh.x, bh.y - bh.h * .55, 0x9cff6a, 20, 130, .3); wait(.15).then(() => { if (bh.alive) killFx(bh); }); }
+        if (bh && bh.alive) { bh.hit(bh.hp, { big: true }); CMB.hit(); if (L.portrait) numAt(bh.x + 4, bh.y - bh.h * .3, '35', 56, 0xb8ff6a, null, { onBoss: true, noStack: true }); else numAt(bh.x + 24, bh.y - bh.h - 118, '35', 60, 0xb8ff6a, picked[2].icon); fx.ring(bh.x, bh.y - bh.h * .55, 0x9cff6a, 20, 130, .3); wait(.15).then(() => { if (bh.alive) killFx(bh); }); }
         bossChip(35, 0xb8ff6a, picked[2].icon); }
     } }); }
   // card 4 -> she halts and heals / the fallen EXPLODE into Thorn
@@ -4370,7 +4379,7 @@ OK.start(CFG, async function (OK, C) {
     bossChip(30, 0xff8a2a, 'sk_explode'); OK.fx.flash(0xff8a2a, .12, .25);
   }
   // THE DUEL: Thorn swings, she dodges, then the 4-hit chain -- one hit per card, his bar drops with each -- and he falls
-  QA.stage = 'finisher';
+  QA.stage = 'finisher'; OK.layers.fxWorld.children.filter(c => c.isNum && !c.destroyed).forEach(c => { OK.killTweens(c); tween(c, { alpha: 0 }, .15, 'linear').then(() => { if (!c.destroyed) c.destroy(); }); });   /* r3 r3: the army's last numbers leave before Thorn steps in (none ends up on his face) */
   if (!L.portrait) { camMode = 'focus'; camFocus = () => (hero.x + boss.x) / 2; }
   if (boss.y !== GY) tween(boss, { y: GY }, .3, 'outQuad');
   heroOff = 150;   /* portrait: the two of them centred for the duel */
@@ -4384,7 +4393,7 @@ OK.start(CFG, async function (OK, C) {
         const d = parts[i]; CMB.hit(); if (lastHit) CMB.final(); boss.hit(lastHit ? boss.hp : Math.min(d, boss.hp - 1), { big: true }); boss.flash({ white: .15, rgb: [1, .8, .4] });
         const kb = boss.v; OK.killTweens(kb); kb.rotation = 0; const hold = i === 2; tween(kb, { x: hold ? 34 : 30 }, .06, 'outQuad').then(() => wait(.17)).then(() => { if (!hold) tween(kb, { x: 0 }, .2, 'outQuad'); });   /* r3: straight knock-back, no pendulum tilt */ if (lastHit) { OK.killTweens(hero.v); tween(hero.v, { y: 0 }, .07, 'inQuad'); }   /* the third blow leaves him reeling for the last one */
         const tp = hero.bladeTip() || { x: boss.x - 40, y: boss.y - C.bossH * .5 }; fx.spark(tp.x, tp.y, 1, true, 0xffe066); fx.blood(tp.x + 8, tp.y, 1);
-        const shortP = L.portrait && L.vh / L.vw < 1.9; numAt(boss.x - 105 + (lastHit && L.portrait ? (shortP ? 56 : -6) : 0), boss.y - C.bossH * (lastHit ? (L.portrait ? 1.24 : 1.0) : .97),   /* r3: the final 42 never touches the HIT COMBO count */ String(d), lastHit ? (shortP ? 70 : 96) : 60, 0xffe14a, (lastHit && L.portrait ? null : picked[i].icon), { onBoss: true, noStack: lastHit, side: -1, hold: lastHit ? .5 : .2, fade: .16, rise: 14 });
+        const shortP = L.portrait && L.vh / L.vw < 1.9; numAt(boss.x - 105 + (lastHit && L.portrait ? (shortP ? 56 : -6) : L.portrait ? 13 : 0), boss.y - C.bossH * (lastHit ? (L.portrait ? 1.24 : 1.0) : .97),   /* r3: the final 42 never touches the HIT COMBO count */ String(d), lastHit ? (shortP ? 70 : 96) : 60, 0xffe14a, (L.portrait ? null : picked[i].icon)   /* r3 r3: portrait -- no icon (it touched the HIT COMBO count); the card's slot lights instead */, { onBoss: true, noStack: lastHit, side: -1, hold: lastHit ? .5 : .2, fade: .16, rise: 14 });
         sfx('slice', .7, .95 + i * .08); sfx('PUNCH_' + (i % 3), .55); OK.shake(lastHit ? 1 : .45); OK.hitStop(lastHit ? .3 : .07);
         if (lastHit) { slam('ULTIMATE COMBO!', { size: L.portrait ? 70 : 92, fill: 0xffd34a, stroke: 0x3b1a07, at: L.portrait && ROW.bottom ? (ROW.bottom + 36 * L.u) / L.vh : SA(),   /* r3: portrait -- in the gap between the combo row and the HIT COMBO counter (never on either) */ hold: .9 }); OK.fx.flash(0xfff2b0, .12, .35); sfx('death-final', .7);
           fx.burst(boss.x, boss.y - C.bossH * .5, 26, 0xffd35a, { speed: 300, r: 9 }); fx.burst(boss.x, boss.y - C.bossH * .5, 18, 0xa3100f, { speed: 240, r: 8 }); ROW.flashSeq(4); }
@@ -4415,7 +4424,7 @@ OK.start(CFG, async function (OK, C) {
 
   // V6a -- the in-game WIN beat: the 4 chosen cards, centre screen, joined by golden energy (no CTA, no logo, no store)
   QA.stage = 'combo'; if (hero.bar) hero.bar.visible = false; OK.fx.clearNumbers();
-  tween(ban, { alpha: 0 }, .12, 'linear', { real: true }).then(() => { ban.visible = false; });
+  await tween(ban, { alpha: 0 }, .12, 'linear', { real: true }).then(() => { ban.visible = false; });   /* r3 r3: the banner is gone before YOUR COMBO lands */
   tween(OK.layers.dim, { alpha: .72 }, .3, 'outQuad', { real: true });
   const cc = new P.Container(); OK.layers.top.addChild(cc); const CW = 230, CH = 356, cards = [];
   picked.forEach((cd, i) => { const v = new P.Container(); const gl = OK.softGlow(); gl.tint = 0xffc84a; gl.blendMode = 'add'; gl.width = CW * 1.6; gl.height = CH * 1.4; gl.alpha = .5;
@@ -4439,7 +4448,7 @@ OK.start(CFG, async function (OK, C) {
   for (let i = 0; i < 4; i++) { const v = cards[i]; v.scale.set(1.24); tween(v.scale, { x: 1, y: 1 }, .3, 'outBack', { real: true }); { const g = v.children[0]; g.alpha = 1; tween(g, { alpha: .5 }, .45, 'outQuad', { real: true }); } sfx('CLICK', .4, 1.2 + i * .12); await wait(.26, true); }
   cards.forEach(v => { v.scale.set(1.1); tween(v.scale, { x: 1, y: 1 }, .35, 'outBack', { real: true }); v.children[0].alpha = 1; tween(v.children[0], { alpha: .65 }, .6, 'outQuad', { real: true }); });
   { const k = ttl.scale.x; ttl.scale.set(k * 1.25); tween(ttl.scale, { x: k, y: k }, .35, 'outBack', { real: true }); } OK.fx.flash(0xffd34a, .12, .3); OK.shake(.35); sfx('final', .6);   /* v23: the four fire together */   /* the cards light one after another */
-  await wait(1.5, true);
+  await wait(1.15, true);   /* r3 r3: length (YOUR COMBO stays >= 1.6 s) */
   // V6 -- ONE end card: Limor's approved chest card, the concept headline, native PLAY NOW with a tap hand
   OK.ecHeadline = 'DISCOVER EPIC COMBOS'; OK.ecSub = '';
   OK.showEndCard();

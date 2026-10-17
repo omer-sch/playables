@@ -3132,7 +3132,8 @@ OK._rigN = 0;
 const allActors = OK.actors = [];
 OK.add = a => { allActors.push(a); return a; };
 tickers.push(() => { const x0 = OK.cam.x, x1 = OK.cam.x + OK.viewW(); for (const a of allActors) if (a.bar && a.alive) { a.bar.y = 22; a.bar.x = (a.barDX || 0) + a.v.x + (a.bodyDX ? a.bodyDX() : 0); a.bar.renderable = a.barHide ? false : a.bar.renderable;
-      if (a.barClamp) { const hw = a.bar.width / 2, sx = world.x + (a.x + a.bar.x) * L.ws, over = sx + hw * L.ws - (L.vw - 10); if (over > 0) a.bar.x -= over / L.ws; }   /* r3: kept on screen, recomputed from live values every frame (never accumulated) */   /* r3: the bar is re-placed from the owner's LIVE x every frame (never a stored/target x, never a lag) */ const m = a.keepBody ? 20 : Math.max(60, a.h * .3), vis = a.barAlways || (a.x - m > x0 && a.x + m < x1); a.bar.alpha += ((vis ? 1 : 0) - a.bar.alpha) * 0.3; if (a._drawFm) a._drawFm(); a.bar.scale.set(Math.min(a.barMaxS || 9, (OK.cam.zoom < 1 ? 1 / OK.cam.zoom : 1)) * (L.portrait ? 1 : 1.3)); /* bars keep their screen size through camera zooms */ } });
+      if (a.barClampL) { const hw = a.bar.width / 2, sx = world.x + (a.x + a.bar.x) * L.ws, under = (a.barClampL) - (sx - hw * L.ws); if (under > 0) a.bar.x += under / L.ws; }   /* r3c: left margin: the plate is never closer than N px to the screen edge (recomputed from live values each frame) */
+    if (a.barClamp) { const hw = a.bar.width / 2, sx = world.x + (a.x + a.bar.x) * L.ws, over = sx + hw * L.ws - (L.vw - 10); if (over > 0) a.bar.x -= over / L.ws; }   /* r3: kept on screen, recomputed from live values every frame (never accumulated) */   /* r3: the bar is re-placed from the owner's LIVE x every frame (never a stored/target x, never a lag) */ const m = a.keepBody ? 20 : Math.max(60, a.h * .3), vis = a.barAlways || (a.x - m > x0 && a.x + m < x1); a.bar.alpha += ((vis ? 1 : 0) - a.bar.alpha) * 0.3; if (a._drawFm) a._drawFm(); a.bar.scale.set(Math.min(a.barMaxS || 9, (OK.cam.zoom < 1 ? 1 / OK.cam.zoom : 1)) * (L.portrait ? 1 : 1.3)); /* bars keep their screen size through camera zooms */ } });
 tickers.push(dt => { for (const a of allActors) if (!a.c.destroyed) a.tick(dt); });
 
 /* ------------------------------------------------------------------ HUD */
@@ -3932,19 +3933,19 @@ OK.start(CFG, async function (OK, C) {
   OK.bodiesStay = true;
   OK.buildBackground('bg', 7, -320);
   const landFY = 726;
-  OK.cam.landFull = true; OK.cam.landExtra = 1.2; OK.pace = 1; OK.onLayout(L => { OK.cam.focusY = L.portrait ? 700 : landFY; }); OK.relayout();
+  OK.cam.landFull = true; OK.cam.landExtra = 1.07; OK.pace = 1; OK.onLayout(L => { OK.cam.focusY = L.portrait ? 700 : landFY; }); OK.relayout();
 
   /* ---------------- world plan */
   const X1 = 400;   /* where Thorn will stand (she is not made to run to him: no empty running) */
   const hero = OK.add(OK.makeRig('woman-2', { height: C.heroH, hp: C.heroHp, id: 'hero', barOpt: { w: 138 } }));
-  hero.keepBody = true; hero.barDX = L.portrait ? -26 : -55; hero.zBias = 20; hero.follow = .14; hero.atkTs = 1.5; hero.atkTsW = 1.2; hero.atkTsS = .72; hero.runTs = .85;
+  hero.keepBody = true; hero.barClampL = 22; hero.barDX = L.portrait ? -26 : -55; hero.zBias = 20; hero.follow = .14; hero.atkTs = 1.5; hero.atkTsW = 1.2; hero.atkTsS = .72; hero.runTs = .85;
   hero.y = GY; hero.x = X1 - C.engage - (L.portrait ? 300 : 220);
   let feel = FEEL.start; hero.setSkin('woman-2', feel.from, feel.ws); hero.reach = feel.reach;
   const mk = (skin, x, hp, o) => {
     const e = OK.add(OK.makeRig(skin, Object.assign({ height: C.meleeH, hp, face: -1 }, o))); e.x = x; e.y = GY; e.homeX = x;
     e.reach = /man-1|man-3/.test(skin) ? 0 : 20; e.atkTs = 1.7; e.atkTsW = 1.4; e.atkTsS = .9; e.follow = .1; e.runTs = .95; return e;
   };
-  const first = mk('man-2', hero.x + (L.portrait ? 290 : 520), 6);                                            /* the first bandit: in sight during the intro */
+  const first = mk('man-2', hero.x + (L.portrait ? 232 : 520), 6);                                            /* the first bandit: in sight during the intro */
   const horde = [mk('man-3', 0, C.enemyHp), mk('man-1', 0, C.enemyHp), mk('man-2', 0, C.enemyHp * 2, { height: C.meleeH * 1.14 })];   /* 3 on screen at once reads as a horde in portrait; a 4th cost ~2 s */
   horde[2].tintClothes([.75, .38, .34]);   /* the brute: taller, red gear, twice the HP */
   const guard = mk('man-3', 0, C.enemyHp); guard.tintClothes([.45, .55, .85]);   /* Thorn's elite: steel-blue */
@@ -3971,11 +3972,11 @@ OK.start(CFG, async function (OK, C) {
     let tx = hero.x - vw * (L.portrait ? 0.35 : 0.4);
     if (camMode === 'look') tx = hero.x - vw * (L.portrait ? 0.22 : 0.3);
     if (camMode === 'chest' && OK._chestSpan) tx = (OK._chestSpan[0] + OK._chestSpan[1]) / 2 - vw / 2;   /* r3: THE HORDE! -- the camera looks down the path at the waiting line */
-    if (camMode === 'bossIn') tx = hero.x - vw * (L.portrait ? 0.21 : 0.3);
+    if (camMode === 'bossIn') tx = Math.min(hero.x - vw * .12, Math.max(hero.x - vw * (L.portrait ? 0.21 : 0.3), boss.x + 150 - vw));   /* r3c: the camera pans AHEAD: Thorn slides in whole, never half off the edge */
     if (camMode === 'win') tx = Math.min(hero.x - vw * (L.portrait ? .17 : .1), Math.max(hero.x - vw * (L.portrait ? 0.26 : 0.3), (hero.x + boss.x + 170) / 2 - vw / 2));   /* v13: she and the fallen boss share the frame */   /* v8: she and her HP plate stay inside the frame through VICTORY */
     if (camMode === 'down') tx = L.portrait ? (hero.x - 250 + boss.x + 130) / 2 - vw / 2 : (hero.x - 170 + boss.x) / 2 - vw / 2;   /* r3b: her lying body and his plate both in frame */   /* v12: she lies to the left of her feet: keep all of her in frame */
     if (camMode === 'boss') tx = (hero.x + boss.x) / 2 - vw / 2 + (L.portrait ? 28 : 0);
-    OK.cam.x += (tx - OK.cam.x) * (hero.walking && camMode === 'hero' ? 0.24 : 0.12); if (OK.cam.x < -1500) OK.cam.x = -1500;
+    OK.cam.x += (tx - OK.cam.x) * (hero.walking && camMode === 'hero' ? 0.24 : camMode === 'bossIn' ? 0.32 : 0.12); if (OK.cam.x < -1500) OK.cam.x = -1500;
   });
   /* r3: bodies stay lying in a row (the game does): no fades as she walks past them */
   const walk = OK.sfxLoop('walk', .4); OK.onTick(() => { if (hero.walking && hero.alive) walk.start(); else walk.stop(); });
@@ -4008,7 +4009,7 @@ OK.start(CFG, async function (OK, C) {
   /* a number on a foe: red = normal, gold = crit; its size is the weapon's signature */
   function hitNumber(e, d, crit, o) {
     const isB = e === boss, far = crit || !L.portrait || isB;
-    fx.number(o && o.nx != null ? o.nx : isB ? e.x + 30 : (far ? e.x + 30 : e.x), o && o.ny != null ? o.ny : isB ? e.y - C.bossH - 44 : e.y - e.h - (L.portrait ? 62 : 80), (crit ? 'CRIT ' : '') + d,
+    fx.number(o && o.nx != null ? o.nx : isB ? e.x + 30 : (far ? e.x + 30 : e.x), o && o.ny != null ? o.ny : isB ? e.y - C.bossH * .6 : e.y - e.h - (L.portrait ? 62 : 80), (crit ? 'CRIT ' : '') + d,
       Object.assign({ size: crit ? (feel.csize || feel.size + 8) : feel.size, fill: crit ? 0xffe14a : 0xff4a36, align: isB ? null : (far ? 'left' : null) }, o || {}));
   }
   function damage(e, d, crit, o) {                           /* every number == what the bar loses */
@@ -4051,7 +4052,8 @@ OK.start(CFG, async function (OK, C) {
   async function enemyStrike(e, dmg) { await e.attack(hero, { onStrike: foeSwoosh(e), onHit: () => heroTakes(dmg) }); }
   /* v9 tempo: a counter-blow starts while her own swing is still recovering; resolves on ITS impact (not on the end of his animation) */
   function counter(e, dmg) { let done; const hitP = new Promise(r => { done = r; }); e.attack(hero, { onStrike: foeSwoosh(e), onHit: () => { heroTakes(dmg); done(); } }); return hitP; }
-  async function approach(e) { if (e.alive && hero.x < e.x - C.engage - 2) await hero.moveTo(e.x - C.engage, C.run); }
+  const lane = on => tween(hero, { y: GY + (on ? 30 : 0) }, .18, 'outQuad');   /* r3c: while she runs past the fallen she keeps to the near edge of the path: her feet never cross their faces */
+  async function approach(e) { if (e.alive && hero.x < e.x - C.engage - 2) { lane(true); await hero.moveTo(e.x - C.engage, C.run); lane(false); } }
   const heroScreen = () => ({ x: OK.layers.world.x + hero.x * L.ws, y: OK.layers.world.y + (hero.y - C.heroH * .5) * L.ws });
 
   /* =============================== BEATS =============================== */
@@ -4067,12 +4069,12 @@ OK.start(CFG, async function (OK, C) {
   await wait(.15);
 
   /* the horde surges -- more than a dagger can handle -- and a weapon chest drops (the game's own way to get gear) */
-  QA.stage = 'horde-in'; HV.tip(false); camMode = 'look';
+  QA.stage = 'horde-in'; HV.tip(false); camMode = 'look'; OK.fx.clearNumbers();   /* r3c: no leftover numbers under THE HORDE! */
   if (L.portrait) OK.zoomTo(.74, .5);   /* r3b: the whole waiting line fits the frame */
   chest.x = CHX;   /* r3: the chest lands short of the first body: the body stays */
   sfx('shout-2', .7); horde.forEach((e, i) => wait(.12 * i).then(() => { if (e.alive && !e.busy) { e.flash(); } }));   /* they wait in place: a shout, a flicker of steel down the line */
   const hordeSlam = fx.slam('THE HORDE!', { size: 88, fill: 0xff5a3a, stroke: 0x2a0505, y: .3, hold: 1.8 });
-  await hero.moveTo(HS, C.run);   /* r3b: she runs on past the body toward the line; the chest drops ahead of her */
+  lane(true); await hero.moveTo(HS, C.run); lane(false);   /* r3b: she runs on past the body toward the line; the chest drops ahead of her */
   { chest.visible = true; const y0 = chest.y; chest.y = y0 - 300; chest.alpha = 0; tween(chest, { alpha: 1 }, .1); sfx('chest', .4, 1.4);
     await tween(chest, { y: y0 }, .32, 'inQuad'); OK.shake(.15); fx.burst(chest.x, y0 - 6, 14, 0x9a8460, { speed: 160, r: 8, gravity: 40 });
     const sy = chest.scale.y; await tween(chest.scale, { y: sy * .86 }, .06); await tween(chest.scale, { y: sy }, .18, 'outBack'); }
@@ -4117,17 +4119,18 @@ OK.start(CFG, async function (OK, C) {
   /* r3 ROOT FIX (HP bar 'runs ahead then snaps back'): the old per-frame clamp pinned his bar to the screen edge while he moved, and the
    * game tweened the bar's x on its own. Now the engine places every bar from its owner's live x each frame; his offset is chosen to fit. */
   boss.bar.visible = true; boss.barDX = L.portrait ? 0 : 55;   /* r3: no edge clamp at all: the bar is centred a little left under him and fades in once he is fully in view */
-  const toThorn = hero.moveTo(boss.x - C.bossEngage, C.run);   /* r3b: one continuous run to him; he waits at the end of the path */
+  lane(true); const toThorn = hero.moveTo(boss.x - C.bossEngage, C.run).then(() => lane(false));   /* r3b: one continuous run to him; he waits at the end of the path */
   await until(() => boss.x + 120 < OK.cam.x + OK.viewW() || !hero.walking);   /* he is fully in frame */
   { const bv = boss.v, sy0 = bv.scale.y, sx0 = bv.scale.x;   /* r3b: a heavy stomp in place: crouch, hop ~45 px, land with dust + a zoom punch */
-    await tween(bv.scale, { y: sy0 * .9, x: sx0 * 1.04 }, .12, 'outQuad');
-    tween(bv.scale, { y: sy0, x: sx0 }, .1, 'outQuad'); await tween(bv, { y: -46 }, .17, 'outQuad'); await tween(bv, { y: 0 }, .13, 'inQuad');
+    await tween(bv.scale, { y: sy0 * .8, x: sx0 * 1.08 }, .16, 'outQuad');   /* r3c: a deeper crouch, a higher, longer hop, dust at his feet on take-off */
+    fx.burst(bx0 - 50, GY - 8, 8, 0x6b5a45, { speed: 120, r: 8, gravity: 30 }); fx.burst(bx0 + 50, GY - 8, 8, 0x6b5a45, { speed: 120, r: 8, gravity: 30 });
+    tween(bv.scale, { y: sy0 * 1.03, x: sx0 * .98 }, .12, 'outQuad'); const spy = boss.sp.y; await tween(boss.sp, { y: spy - 84 }, .22, 'outQuad'); await tween(boss.sp, { y: spy }, .2, 'inQuad');   /* (the rig body, not v: v.y is damped every frame while he stands) */
     tween(bv.scale, { y: sy0 * .93, x: sx0 * 1.03 }, .05).then(() => tween(bv.scale, { y: sy0, x: sx0 }, .18, 'outBack')); }
   boss.barAlways = true; OK.shake(.75); OK.hitStop(.08); OK.fx.flash(0xff2a10, .1, .25);
   fx.burst(bx0 - 60, GY - 8, 18, 0x6b5a45, { speed: 190, r: 10, gravity: 40 }); fx.burst(bx0 + 60, GY - 8, 18, 0x6b5a45, { speed: 190, r: 10, gravity: 40 }); fx.ring(bx0, GY - 10, 0xc8a070, 24, 260, .35);
   { const z0 = OK.cam.zoom; OK.zoomTo(z0 * 1.07, .07).then(() => OK.zoomTo(z0, .3)); }
   const bfT = OK.G.real; fx.slam('BOSS FIGHT!', { size: 92, fill: 0xff5a3a, y: .3, hold: 1.8 });
-  await toThorn; await until(() => OK.G.real - bfT > 1.05);   /* r3b: her first number lands as BOSS FIGHT! clears (she squares up meanwhile) */
+  await toThorn; await until(() => OK.G.real - bfT > .4);   /* r3c: her wind-up starts under the banner (no idle); the numbers sit at his chest, clear of the banner */
   QA.stage = 'duel'; camMode = 'boss';
   /* two exchanges: her blows land, his hurt more */
   const spare = Math.max(4, hero.hp - 2 - 14), c1 = Math.max(2, Math.floor(spare / 2));   /* v12: his two answers hurt, and FURY is always the biggest number of the fight */
@@ -4181,11 +4184,12 @@ OK.start(CFG, async function (OK, C) {
   await wait(.42); hero.busy = false; hero.sp.state.data.defaultMix = 0;   /* she is back on her feet, glowing */
   const onThorn = (d, col, stroke) => { boss.hit(Math.min(d, boss.hp), { big: true }); boss.flash({ white: .16, rgb: [1, .5, .42] }); QA.bossPct = +(boss.hp / boss.maxHp).toFixed(3); B('hit', d);
     fx.number(boss.x + 30, boss.y - C.bossH - 44, String(d), { size: 84, fill: col, stroke }); };
-  const breakHim = () => { OK.killTweens(rageG); tween(rageG, { alpha: 0 }, .25); tween(boss.v.scale, { x: bsx, y: bsy }, .25); boss.play('idle', true); wait(.3).then(() => { boss.sp.state.data.defaultMix = 0; }); };   /* his raised blow is broken */
+  const breakHim = () => { OK.killTweens(rageG); tween(rageG, { alpha: 0 }, .25); tween(boss.v.scale, { x: bsx, y: bsy }, .25); wait(.35).then(() => { if (won) return; boss.sp.state.data.defaultMix = .15; const tr = boss.play('atack', false, .7); wait(.3).then(() => { tr.timeScale = 0; }); }); };   /* r3c: he staggers, then starts to swing again: the final blow interrupts it */   /* his raised blow is broken */
   let vicUp = false, vcRef = null;
-  const finish = { d: 2 * D, crit: S.skill === 'crit' || !!feel.pat, num: Object.assign({ size: (S.skill === 'crit' || feel.pat) ? 92 : 118 }, L.portrait ? { nx: boss.x + 110, ny: GY - C.bossH * .78, align: 'left' } : {}), onHit: () => { won = true; boss.baseTint = null; if (hero.bar) hero.bar.renderable = false; OK.fx.flash(0xffffff, .5, .12); OK.zoomTo(OK.cam.zoom * 1.08, .12); QA.stage = 'victory'; camMode = 'win'; OK.G.slow = .35; sfx('death-final', .9); OK.fx.flash(0xfff2c0, .2, .3); OK.shake(.9);
+  const finish = { d: 2 * D, crit: S.skill === 'crit' || !!feel.pat, num: Object.assign({ size: (S.skill === 'crit' || feel.pat) ? 92 : 118 }, { nx: boss.x + 90, ny: GY - C.bossH * .55, align: 'left' }), onHit: () => { won = true; boss.baseTint = null; OK.fx.flash(0xffffff, .5, .12); OK.zoomTo(OK.cam.zoom * 1.08, .12); QA.stage = 'victory'; camMode = 'win'; OK.G.slow = .35; sfx('death-final', .9); OK.fx.flash(0xfff2c0, .2, .3); OK.shake(.9);
     fx.burst(boss.x, boss.y - C.bossH * .5, 22, 0xa3100f, { speed: 240, r: 9 }); fx.burst(boss.x, boss.y - C.bossH * .5, 14, 0xffd35a, { speed: 200, r: 6 });
-    boss.busy = false; boss.keepBody = true; boss.die(); tween(boss.c, { x: boss.x + (L.portrait ? 50 : 120) }, .45, 'outCubic'); HV.use(HV.marks[1]); wait(.7, true).then(() => until(() => !OK._slam || OK._slam.destroyed)).then(showVictory); }   /* r3b: VICTORY! lands after FINAL BLOW! has cleared */ };
+    boss.busy = false; boss.keepBody = true; boss.die(); if (boss.bar) { boss.bar.visible = true; boss.bar.alpha = 1; } wait(.5, true).then(() => { if (boss.bar) boss.bar.visible = false; if (hero.bar) hero.bar.renderable = false; });   /* r3c: both plates stay ~0.35 s so his drains to 0 */
+     tween(boss.c, { x: boss.x + (L.portrait ? 50 : 120) }, .45, 'outCubic'); HV.use(HV.marks[1]); wait(.7, true).then(() => until(() => !OK._slam || OK._slam.destroyed)).then(showVictory); }   /* r3b: VICTORY! lands after FINAL BLOW! has cleared */ };
   if (S.skill === 'stun') {                                 /* he freezes with the blow in the air; she takes three free hits */
     fx.slam('STUNNED!', { size: 88, fill: 0xcfe0ff, stroke: 0x101a44, y: .3, at: .19, hold: 1.8 });
     { const sx = boss.x, sy = boss.y - C.bossH * .55; fx.ring(sx, sy, 0x9fb8ff, 30, 330, .45); fx.ring(sx, sy, 0xffffff, 20, 220, .3); OK.fx.flash(0x9fb8ff, .2, .25); boss.baseTint = 0xa9bcff; boss.tint(0xa9bcff); } sfx('PUNCH_1', .7, .6); OK.shake(.35); OK.killTweens(rageG); tween(rageG, { alpha: 0 }, .25);

@@ -3243,7 +3243,7 @@ OK.hookPill = function (line1, line2, opt) {
 /* ------------------------------------------------------------------ guiding hand */
 OK.hand = function () {
   const h = new P.Container(); h.visible = false; h.eventMode = 'none'; top.addChild(h);
-  { const W0 = OK.meta('hand').w; for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, o = OK.sprite('hand', 0.18, 0.08); o.tint = 0x1a0c02; o.alpha = .6; o.x = Math.cos(a) * W0 * .035; o.y = Math.sin(a) * W0 * .035; h.addChild(o); } h.addChild(OK.sprite('hand', 0.18, 0.08)); }   /* r3b: a dark rim: the hand reads on the orange card */   /* C3-3: a hint hand never swallows a tap */
+  { const W0 = OK.meta('hand').w; for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2, o = OK.sprite('hand', 0.18, 0.08); o.tint = 0x1a0c02; o.alpha = .9; o.x = Math.cos(a) * W0 * .06; o.y = Math.sin(a) * W0 * .06; h.addChild(o); } h.addChild(OK.sprite('hand', 0.18, 0.08)); }   /* r3b: a dark rim: the hand reads on the orange card */   /* C3-3: a hint hand never swallows a tap */
   let loop = null, cur = null;
   tickers.push(() => { if (!loop || !cur || !h.visible || h.destroyed) return; const a = cur.pts(); if (!a || !a.length) return; const p = a[cur.st.i % a.length]; if (!p) return; h.scale.set(110 / OK.meta('hand').w * L.u * 1.4 * (OK.handK || 1) * cur.st.k); h.x = p.x + cur.st.dx * L.u; h.y = p.y + cur.st.dy * L.u; });
   return {
@@ -3298,7 +3298,7 @@ OK.pickCard = function (cards, opt) {
       const R = OK.HV && OK.HV.rect, top = R ? R.mapBottom : 0, bot = R ? R.xpTop : L.vh;
       let s;
       if (L.portrait) { s = Math.min(L.u * 1.08, L.vw * 0.96 / (CW * 2 + 40), L.vh * 0.72 / (CH + 90)); box.y = L.vh * 0.5; }
-      else { const ts = L.u * .62, top0 = (R ? R.mapBottom : 60 * L.u) + 6, cTop = top0 + 166 * ts + 6; title.sK = .62; s = Math.min(L.u * 0.98, L.vw * 0.96 / (CW * 2 + 40), (L.vh - 8 - cTop) / CH); box.y = cTop + CH * s / 2; }   /* r3b: title between the HUD and the cards, never on them */   /* C3-3: landscape cards use 70 % of the height (card text >= 12 px on 844x390); they sit over the dimmed dock */
+      else { const ts = L.u * .62, top0 = (R ? R.mapBottom : 60 * L.u) + 6, cTop = top0 + 166 * ts + 6; title.sK = .62; s = Math.min(L.u * 0.98, L.vw * 0.96 / (CW * 2 + 40), (Math.min(L.vh - 8, bot - 6) - cTop) / CH * .92);   /* r3c: the cards stop above the rage bar */ box.y = cTop + CH * s / 2; }   /* r3b: title between the HUD and the cards, never on them */   /* C3-3: landscape cards use 70 % of the height (card text >= 12 px on 844x390); they sit over the dimmed dock */
       box.scale.set(s); box.x = L.vw / 2;
       title.anchorY = box.y - CH * s / 2 - (L.portrait ? 74 * L.u : 6 + 74 * L.u * .62); if (title.place) title.place();
       views.forEach((v, i) => { v.x = (i - (views.length - 1) / 2) * (CW + 36); });
@@ -3309,7 +3309,7 @@ OK.pickCard = function (cards, opt) {
     OK.sfx('card', .7);
     let tt = 0; const pulse = (dt, dr) => { tt += dr; views.forEach((v, i) => { if (chosen < 0) { v._glow.alpha = 0.35 + 0.3 * Math.sin(tt * 5 + i * 1.6); } }); };
     tickers.push(pulse);
-    wait(.45, true).then(() => { if (chosen < 0) hand.pointAt(() => (QA.cards || []).map(c => ({ x: c.x + c.w * 0.04, y: c.y - c.h * 0.3 })));   /* C3-3 r4: on the icon art, clear of the card title at every size */ });
+    wait(.45, true).then(() => { if (chosen < 0) hand.pointAt(() => (QA.cards || []).map(c => ({ x: c.x + c.w * 0.04, y: c.y - c.h * (L.portrait ? 0.3 : 0.38) })));   /* C3-3 r4: on the icon art, clear of the card title at every size */ });
     QA.stage = opt.stage || 'pick'; QA.pickOpen = true;
     /* v98: no idle auto-pick and no timer past a choice: the pick waits for the player's tap (the hand keeps looping) */
     function choose(i) {
@@ -3941,7 +3941,8 @@ OK.start(CFG, async function (OK, C) {
   let camBX = 0, camFoe = null, camMode = 'cc', ccK = { k: 0 }, fyCur = 700, lastV = [0, 0], snapOk = false;
   const ccGeom = () => L.portrait ? { hx: .36, fy: .60, hh: .35 } : { hx: .22, fy: .95, hh: .72 };   /* portrait: close to the fight scale, so the snow plate stays as sharp as in the fight */
   const PZ = .92;                                           /* r4: portrait = v98's framing (hero ~31 % of the height, feet ~70 %); one foe at a time keeps everyone inside the edges, not a zoom-out */
-  const zoomT = () => L.portrait ? PZ : 1.2;   /* r3b: landscape fighters ~1.3x bigger (critic: ~95 px, unreadable plates) */
+  let finale = false, finZ = PZ;
+  const zoomT = () => L.portrait ? (finale ? finZ : PZ) : 1.42;   /* r3b: landscape fighters ~1.3x bigger (critic: ~95 px, unreadable plates) */
   const BG_DIM = 0x8f98b8, setBg = c => OK.layers.bgLayer.children.forEach(o => { o.tint = c; });
   /* final: on the creation screen only the two figures are enlarged; the snow scene keeps its fight-scale sharpness (counter-scaled about the hero's feet), under the dim */
   const bgF = { f: 1, zi: 1 }, BGL = OK.layers.bgLayer; BGL.pivot.set(X0, GY); BGL.position.set(X0, GY);
@@ -3960,14 +3961,14 @@ OK.start(CFG, async function (OK, C) {
     const vw2 = OK.viewW();
     let tx = hero.x - vw2 * (L.portrait ? 0.31 : 0.4);
     if (camMode === 'hero' && L.portrait && camFoe && camFoe.alive && camFoe.c.visible) tx = Math.max(tx, Math.min(camFoe.x + 105 - vw2, hero.x - 110));   /* r3b: the camera leads to the foe ahead: he is fully in frame before the knight reaches him; the knight keeps >= 110 behind him */
-    if (camMode === 'boss') tx = L.portrait ? (hero.x - 95 + camBX + 175) / 2 - vw2 / 2 : hero.x - vw2 * .4;   /* r3b portrait: both fighters centred, Thorn's hit recoil keeps >= 20 px from the right edge */   /* the duel: both fighters framed; the framing is kept through the final blow (no zoom-out, no empty band) */
+    if (camMode === 'boss') tx = L.portrait ? Math.min((hero.x - 95 + camBX + 175) / 2 - vw2 / 2, hero.x - (finale ? 110 : 100)) : hero.x - vw2 * .4;   /* r3c: the knight keeps >= 100 units (>= 55 px) from the left edge */   /* r3b portrait: both fighters centred, Thorn's hit recoil keeps >= 20 px from the right edge */   /* the duel: both fighters framed; the framing is kept through the final blow (no zoom-out, no empty band) */
     if (L.vw !== lastV[0] || L.vh !== lastV[1]) { lastV = [L.vw, L.vh]; if (snapOk) { OK.cam.x = tx; fyCur = L.portrait ? 700 : 726; } }   /* a rotation / resize re-frames at once */
     snapOk = true;
     OK.cam.x += (tx - OK.cam.x) * (hero.walking && camMode !== 'cc' ? 0.24 : 0.12);
     fyCur += ((L.portrait ? 700 : 726) - fyCur) * .1; OK.cam.focusY = fyCur;
   };
   boss.sp.update(0); boss.tick(0); hero.tick(0);
-  OK.onTick(camTick); camTick(); camTick(); OK.relayout(); camTick(); OK.relayout();   /* frame 0 is already the framed stakes shot */
+  OK.onTick(camTick); camTick(); camTick(); OK.relayout(); camTick(); OK.relayout(); OK.app.render();   /* frame 0 is already the framed stakes shot */
   const feetScreen = () => ({ x: OK.layers.world.x + hero.x * L.ws, y: OK.layers.world.y + GY * L.ws });
 
   /* =============================== THE HOOK, THEN CREATE YOUR KNIGHT ===============================
@@ -4152,7 +4153,7 @@ OK.start(CFG, async function (OK, C) {
   function archerCover(list, every, first) {                /* the archers in the back fire at the hero while he/she fights the front */
     const id = {}; coverId = id; let k = 0;
     (async () => { await wait(first); while (coverId === id) { if (!hero.alive) return;
-      const as = list.filter(e => e.opt.ranged && e.alive && e.entered && !e._move && e.c.visible && Math.abs(e.x - hero.x) > C.engage + 60 && e.x < OK.cam.x + OK.viewW() - 20);
+      const as = list.filter(e => e.opt.ranged && e.alive && e.entered && !e._move && e.c.visible && Math.abs(e.x - hero.x) > C.engage + 60 && inFrame(e));
       if (as.length) { const a = as[k++ % as.length]; await shoot(a, () => arrowLands(a, 3)); await wait(every); } else await wait(.25); } })();
     return () => { if (coverId === id) coverId = null; };
   }
@@ -4161,31 +4162,35 @@ OK.start(CFG, async function (OK, C) {
     (async () => { await wait(first); while (e.alive && hero.alive && e._duel && (maxHits == null || n < maxHits)) { const k = n++;
       await e.attack(hero, { onStrike: foeSwoosh(e), onHit: () => { if (e.alive && e._duel) heroTakes(typeof dmg === 'function' ? dmg(k) : dmg); } }); await wait(every); } })();
   }
-  const GAPW = () => L.portrait ? 165 : 250;                /* portrait: the bandit and the archer behind him never overlap, and their plates keep >= 8 px between them */
+  const corpseX = () => { let m = -1e9; for (const k of (OK._corpses || [])) if (!k.gone && !k.a.c.destroyed && k.a.c.visible) m = Math.max(m, k.x); return m; };   /* r3c: the knight never stands on a body: his stop is always >= 145 past the last one */
+  const engOf = e => e.opt.ranged ? C.engage + 45 : C.engage;   /* r3c: the archer's bow clears the knight's chest */
+  const stopFor = e => Math.max(e.homeX - engOf(e), corpseX() + 145);
+  const inFrame = e => e.x + 75 < OK.cam.x + OK.viewW() - 20 / L.ws && e.x - 75 > OK.cam.x + 20 / L.ws;   /* r3c: nobody shoots from off-screen */
+  const GAPW = () => L.portrait ? 165 : 450;                /* portrait: the bandit and the archer behind him never overlap, and their plates keep >= 8 px between them */
   let onDeath = () => {};
   /* a foe's plate shows only once the whole plate is >= 12 px inside the screen (never cut by the right edge while the camera is still catching up) */
   OK.onTick(() => { const xr = OK.cam.x + OK.viewW() - 12 / L.ws; for (const e of wave1.concat(wave2)) if (e.alive && e.bar) e.barAlways = !e._move && e.entered && e.x + e.opt.barOpt.w * e.bar.scale.x / 2 <= xr; });
-  function standAt(e, homeX) { e.homeX = homeX; OK.clearBodies(homeX - 170, homeX + 170); e.c.visible = true; e.entered = true; e.x = homeX; e.walking = false; e._move = null; OK.killTweens(e.c); e.c.alpha = 0; tween(e.c, { alpha: 1 }, .3, 'linear'); }   /* r3 (Limor): like the game, the foe already stands on the path, idle and facing the knight; the KNIGHT walks up to him */
+  function standAt(e, homeX) { e.homeX = homeX; OK.clearBodies(homeX - 170, homeX + 170); e.c.visible = true; e.entered = true; e.x = homeX; e.walking = false; e._move = null; OK.killTweens(e.c); e.c.alpha = 1; }   /* r3 (Limor): like the game, the foe already stands on the path, idle and facing the knight; the KNIGHT walks up to him */
   const aheadX = () => hero.x + OK.viewW() * (L.portrait ? .69 : .6) + 110;    /* just beyond the right edge: the camera reveals him standing as the knight runs in */
   function enter(list, anchor) {                            /* the swordsman and ONE archer run in; a third foe waits out of sight until one of them has fallen (never more than two living foes in a portrait frame) */
-    if (L.portrait) { list._seq = true; standAt(list[0], Math.max(anchor + C.engage, aheadX())); onDeath = () => {}; return; }   /* portrait: ONE foe at a time on screen (the next already waits further down the path): big figures, nobody overlapping, every plate inside the screen */
-    list.forEach((e, i) => standAt(e, anchor + C.engage + i * GAPW()));   /* landscape: the whole group waits in a line, swordsman in front, archers at the back */
+    if (L.portrait) { list._seq = true; standAt(list[0], Math.max(anchor + C.engage, aheadX(), corpseX() + 145 + engOf(list[0]))); onDeath = () => {}; return; }   /* portrait: ONE foe at a time on screen (the next already waits further down the path): big figures, nobody overlapping, every plate inside the screen */
+    list.forEach((e, i) => standAt(e, Math.max(anchor + C.engage, corpseX() + 145 + engOf(list[0])) + i * GAPW()));   /* landscape: the whole group waits in a line, swordsman in front, archers at the back */
     onDeath = () => {};
   }
   async function fightWave(list, dmg) {
     const seq = !!list._seq, stop = seq ? () => {} : archerCover(list, 2.4, .7);
     for (let i = 0; i < list.length; i++) { const e = list[i];
       if (!e.alive) continue;
-      if (seq && i > 0) { standAt(e, aheadX()); if (!hero.walking) await wait(.3); }   /* the next bandit already stands further down the path; a beat after the kill the knight runs on to him */
+      if (seq && i > 0) { standAt(e, Math.max(aheadX(), corpseX() + 145 + engOf(e))); if (!hero.walking) await wait(.3); }   /* the next bandit already stands further down the path; a beat after the kill the knight runs on to him */
       camFoe = e;
       if (seq && e.opt.ranged && e.alive) {                 /* r3b: the archer draws and looses as the knight runs in (no stop); the arrow meets him as he arrives */
-        const hm = hero.moveTo(e.homeX - C.engage, C.run);
-        await until(() => !hero.walking || e.x - 60 < OK.cam.x + OK.viewW());
+        const hm = hero.moveTo(stopFor(e), C.run);
+        await Promise.race([until(() => inFrame(e)), wait(3)]);
         const shot = shootP(e, () => arrowLands(e, 3), 2.4);
         await Promise.race([hm, until(() => !e.alive)]); if (e.alive) await Promise.race([shot, wait(.5)]);
         if (!e.alive) { await wait(.3); continue; } }
       if (!e.alive) continue;
-      if (e.homeX - C.engage > hero.x + 4) await hero.moveTo(e.homeX - C.engage, C.run);
+      if (stopFor(e) > hero.x + 4) await hero.moveTo(stopFor(e), C.run);
       if (!e.opt.ranged) foeLoop(e, dmg, .5, 1.45);
       while (e.alive) { const dead = await heroStrike(e); if (dead || !e.alive) break; await wait(HIT_GAP); }
       e._duel = false; await wait(AFTER_KILL());              /* a beat after the kill, then the walk-up */
@@ -4218,10 +4223,11 @@ OK.start(CFG, async function (OK, C) {
   await fightWave(wave1, 7);
   /* rage payout: one real skill card, 1 of 2 (waits for the tap) */
   await HV.settle();
-  enter(wave2, X2 - C.engage);   /* r3: wave 2 already stands on the path (placed under the picker's dim) */
   if (hero.bar) hero.bar.visible = false;   /* r4: no HP plate ghosting under the cards */
   OK.handK = .95;   /* r3b: a bigger hand on the cards */
-  const p = await OK.pickCard(CARDS, { title: 'RAGE FULL!', sub: 'CHOOSE A SKILL', stage: 'pick', flyTo: () => HV.trayPoint() });
+  const pickP = OK.pickCard(CARDS, { title: 'RAGE FULL!', sub: 'CHOOSE A SKILL', stage: 'pick', flyTo: () => HV.trayPoint() });
+  await wait(.35, true); enter(wave2, X2 - C.engage);   /* r3c: wave 2 is placed once the dim is deep: it never fades in on a clear screen */
+  const p = await pickP;
   if (hero.bar) hero.bar.visible = true;
   OK.handK = .72; HV.levelUp(); HV.addTile(CARDS[p]); HV.place(); S[CARDS[p].id] = true; HV.cap = true;
   await powerUp(p === 0 ? 0xff8a2a : 0x7fd6ff, p === 0 ? 'DOUBLE DAMAGE!' : 'RETURN ARROW!');
@@ -4230,7 +4236,7 @@ OK.start(CFG, async function (OK, C) {
   /* the healing fountain (the game's own stop). It is staged only now, beyond the fallen bandits: off-screen in portrait; in a wide landscape view it fades in ahead
    * (an off-screen fountain there would mean ~3 s of empty running). The knight arrives hurt, the HP bar climbs, THEN the basin runs dry. */
   const X_F = hero.x + (L.portrait ? OK.viewW() * .8 + 260 : 1150);
-  fountain.x = X_F; fountain.visible = true; fountain.alpha = 0; tween(fountain, { alpha: 1 }, .3, 'linear');
+  fountain.x = X_F; fountain.y = GY - 85; fountain.zIndex = GY - 120; fountain.visible = true; fountain.alpha = 0;   /* r3c: the basin stands in the back plane: the knight runs past in front of it, never through it */ tween(fountain, { alpha: 1 }, .3, 'linear');
   OK.clearBodies(X_F - 330, X_F + 200);
   await hero.moveTo(X_F - 185, C.run);
   QA.stage = 'fountain'; await wait(.3);
@@ -4277,14 +4283,13 @@ OK.start(CFG, async function (OK, C) {
       const dead = boss.hit(plan[i], { big: true }); boss.flash({ white: .16, rgb: [1, .5, .42] }); QA.hits.push([+OK.G.t.toFixed(2), 'boss']);
       /* r3: no extra rock on Thorn (Limor, sibling build: a rotating hit read as a pendulum); his rig's own 'hurt' stagger + shove carry the hit */
       const tp = hero.bladeTip() || { x: boss.x - 45, y: boss.y - C.bossH * .5 }; fx.spark(tp.x, tp.y, 1, true, last ? 0xffe066 : null); fx.blood(tp.x + 8, tp.y, 1); fx.burst(tp.x + 10, tp.y, 10, 0xffffff, { speed: 240, r: 6 }); HV.gain(1, { x: tp.x, y: tp.y });
-      if (last) { fx.clearNumbers(); fx.number(boss.x - 30, boss.y - boss.h * .4, plan[i] + '!', { size: 110 * NUM, font: 'bebas', fill: 0xffe14a, stroke: 0x2a0505, hold: .75, life: .3, real: true, pop: 1.6 }); }   /* r3b: the final blow is a big gold number at the strike, below where VICTORY lands */
+      if (last) { fx.clearNumbers(); fx.number(boss.x - 20, boss.y - boss.h - 40, plan[i] + '!', { size: 84 * NUM, font: 'bebas', fill: 0xffe14a, stroke: 0x2a0505, hold: .4, life: .25, real: true, pop: 1.5 }); }   /* r3b: the final blow is a big gold number at the strike, below where VICTORY lands */
       else { const o = overOf(boss, 70); fx.number(o.x + (i % 2 ? 45 : -45), o.y, String(plan[i]), { size: 70 * NUM, font: 'bebas', fill: S.dmg ? 0xffb04a : 0xff4a36, hold: .42, life: .32 }); }   /* above his hood: never on a face or an arm */
       sfx('slice', .6); sfx('PUNCH_' + (i % 3), .5); OK.shake(last ? .8 : .55); OK.hitStop(last ? .14 : .08); if (last) OK.fx.flash(0xfff2b0, .12, .2);   /* ~4 px of shake on every blow to Thorn */
-      if (dead) { won = true; boss._duel = false; QA.stage = 'victory'; OK.G.slow = .45; sfx('death-final', .8); boss.die();
+      if (dead) { won = true; finale = true; finZ = OK.cam.zoom * .84; boss._duel = false; QA.stage = 'victory'; OK.G.slow = .45; sfx('death-final', .8); boss.die();
         /* r4: he drops where he stands and is buried in snow at once; VICTORY lands 0.35 s after the blow */
         /* r3b: the final blow hurls Thorn out of the frame (his lying body would be longer than the portrait view); he is never faded on screen */
-        tween(boss.c, { x: boss.x + 700 }, .5, 'outCubic'); for (let k = 0; k < 6; k++) wait(k * .05).then(() => fx.burst(boss.x - 40, GY - 20, 6, 0xeef4fb, { speed: 150, r: 9, gravity: 30 }));
-        OK.onTick(() => { if (boss.c.visible && boss.x - 300 > OK.cam.x + OK.viewW()) boss.c.visible = false; });
+        tween(boss.c, { x: boss.x + 50 }, .3, 'outCubic'); for (let k = 0; k < 6; k++) wait(k * .05).then(() => fx.burst(boss.x - 40, GY - 20, 6, 0xeef4fb, { speed: 150, r: 9, gravity: 30 }));
         wait(.55, true).then(showVictory); }
     } });
     if (last) break;
@@ -4293,7 +4298,7 @@ OK.start(CFG, async function (OK, C) {
   /* r4 ending, <= 3.5 s from the final blow to the end card, never idle: VICTORY (0.8 s) with the chest dropping under it; the chest bursts,
    * the sword flies onto the knight while the gold counter rolls +250; then the card. */
   await until(() => vShown);
-  QA.stage = 'chest'; chest.x = hero.x + 230;   /* where Thorn stood: no body there */ HV.use(HV.marks[0]);
+  QA.stage = 'chest'; chest.x = hero.x + 262; chest.y = GY + 52;   /* r3c: Thorn's body keeps lying behind it, the chest drops in front, beside it */ HV.use(HV.marks[0]);
   { const ch = chest, y0 = ch.y; ch.visible = true; ch.y = y0 - 300; ch.alpha = 0; tween(ch, { alpha: 1 }, .1, 'linear', { real: true }); const k = ch.scale.x; sfx('chest', .4, 1.4);
     await tween(ch, { y: y0 }, .3, 'inQuad', { real: true }); OK.shake(.15); fx.burst(ch.x, y0 - 6, 14, 0xe8eef8, { speed: 160, r: 8, gravity: 40 });
     const sy = ch.scale.y; await tween(ch.scale, { y: sy * .86 }, .06, 'linear', { real: true }); await tween(ch.scale, { y: sy }, .14, 'outBack', { real: true });
