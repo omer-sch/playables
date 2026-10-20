@@ -4052,7 +4052,7 @@ OK.start(CFG, async function (OK, C) {
   async function enemyStrike(e, dmg) { await e.attack(hero, { onStrike: foeSwoosh(e), onHit: () => heroTakes(dmg) }); }
   /* v9 tempo: a counter-blow starts while her own swing is still recovering; resolves on ITS impact (not on the end of his animation) */
   function counter(e, dmg) { let done; const hitP = new Promise(r => { done = r; }); e.attack(hero, { onStrike: foeSwoosh(e), onHit: () => { heroTakes(dmg); done(); } }); return hitP; }
-  const lane = on => null;   /* v16 (client 20 Oct: 'when she is running she is also moving up and down'): she stays on the one ground line. The old 30 px dip toward the camera on every run read as bobbing; she passes the fallen in front of them (zBias) like in the other five */   /* r3c: while she runs past the fallen she keeps to the near edge of the path: her feet never cross their faces */
+  const lane = on => tween(hero, { y: GY + (on ? 30 : 0) }, .18, 'outQuad');   /* r3c: while she runs past the fallen she keeps to the near edge of the path: her feet never cross their faces */
   async function approach(e) { if (e.alive && hero.x < e.x - C.engage - 2) { lane(true); await hero.moveTo(e.x - C.engage, C.run); lane(false); } }
   const heroScreen = () => ({ x: OK.layers.world.x + hero.x * L.ws, y: OK.layers.world.y + (hero.y - C.heroH * .5) * L.ws });
 

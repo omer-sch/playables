@@ -3935,7 +3935,6 @@ OK.start(CFG, async function (OK, C) {
   const BACK = 62;   /* props stand behind the fight lane, against the wall */
   const smith = OK.makeProp('smith', 0, GY - BACK, 235), statue = OK.makeProp('statue', 0, GY - BACK, 370);
   const fountain = OK.makeProp('fountainEmpty', 0, GY - BACK + 6, 300);
-  const FOUNT_CLEAR = 330;   /* v43: fountain centre -> Thorn: half the fountain + Thorn's half-width + a clear gap */
   const PROPS = [smith, statue, fountain]; PROPS.forEach(p => { p.visible = false; p.zIndex = GY - 400; p._a = 1; });
   OK.onTick(() => { const x0 = OK.cam.x + 4, x1 = OK.cam.x + OK.viewW() - 4; for (const p of PROPS) { if (!p.visible || p._manual) continue; const hw = p.width / 2, inside = !p._gone && p.x - hw >= x0 && p.x + hw <= x1; p._a += ((inside ? 1 : 0) - p._a) * (p._gone ? .2 : .25); p.alpha = p._a < .02 ? 0 : p._a; } });   /* fully on screen or not at all: never cut by an edge */
   /* ---------------- cast (vendor Spine rig). The knight: steel-blue cloth, red bandana. Foes: bald and hooded heads only, dungeon tints. */
@@ -4314,18 +4313,13 @@ OK.start(CFG, async function (OK, C) {
   else T = await openTree(C.points);
   /* ---- back into the dungeon: a fresh run with what he unlocked */
   QA.treeOpen = false; QA.stage = 'run2';
-  wave1.forEach(e => { e.c.visible = false; }); OK._corpses = []; bodyX = -1e9; OK.fx.clearNumbers();   /* v43 (client 20 Oct): the body row restarts for run 2; it used to carry on from run 1 and laid the last bandit under Thorn */
+  wave1.forEach(e => { e.c.visible = false; }); OK._corpses = []; OK.fx.clearNumbers();
   hero.x = XS; hero.maxHp = S.hp ? 70 : C.heroHp; hero.hp = hero.maxHp; HV.setHp(hero);
   const STEP = L.portrait ? 300 : 340; let roadX = XS;
   if (S.anvil) { roadX += STEP; smith.x = roadX; smith.visible = true; }
   if (S.statue) { roadX += STEP; statue.x = roadX; statue.visible = true; }
   placeWave(wave2, roadX + (L.portrait ? 400 : 560));
-  { const last = wave2[wave2.length - 1]; boss.x = last.homeX + (L.portrait ? 700 : 640);
-    if (S.fountain) {   /* v43 (client 20 Oct: 'goes past the boss to get healed and then back'): predict where the fountain will stand and keep Thorn a clear stride beyond it */
-      let bx = -1e9; wave2.forEach(e => { bx = Math.max(e.homeX + 40, bx + 310); });
-      const xf = Math.max(last.homeX - C.engage + (L.portrait ? 262 : 330), bx + 400);
-      boss.x = Math.max(boss.x, xf + FOUNT_CLEAR); }
- boss.c.visible = true; boss.face = -1; if (boss.bar) boss.bar.x = L.portrait ? -20 : 55; }
+  { const last = wave2[wave2.length - 1]; boss.x = last.homeX + (L.portrait ? 700 : 640); boss.c.visible = true; boss.face = -1; if (boss.bar) boss.bar.x = L.portrait ? -20 : 55; }
   /* round 2 (critic: Thorn half off the edge in the pan): he steps out of the dark only once he is wholly on screen */
   /* round 3b (critic: Thorn faded in from nothing): he already stands, opaque, in the lane; the camera simply reaches him */
   OK.cam.x = camX(); OK.layers.dim.alpha = 0; HV.show('map', true); HV.show('coins', true);
@@ -4359,7 +4353,6 @@ OK.start(CFG, async function (OK, C) {
     if (S.fountain) {
       /* round 4: the fountain pops in SOLID beside him first, then heals (ring + the bar rising), holds, and leaves in a sparkle. Never translucent while it works. */
       XF2 = Math.max(hero.x + (L.portrait ? 262 : 330), wave2[wave2.length - 1].x + 400);   /* round 2b: beyond the last body, never on it */
-      XF2 = Math.min(XF2, boss.x - FOUNT_CLEAR);   /* v43: and always short of Thorn: he heals on his way TO the boss, never past him */
       if (XF2 - (L.portrait ? 262 : 330) > hero.x + 4) await hero.moveTo(XF2 - (L.portrait ? 262 : 330), C.run);
       fountain.x = XF2; fountain.texture = OK.tx('fountain'); fountain._manual = true; fountain.visible = true; fountain.alpha = 1; 
       QA.stage = 'fountain';
