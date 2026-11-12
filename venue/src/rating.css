@@ -1,0 +1,62 @@
+/* 2026-11-11 endings (Emily via Limor): rating end card = the client's "5-Star" end card look, score hidden */
+.rate-end { position: absolute; inset: 0; z-index: 95; overflow: hidden; cursor: pointer; opacity: 0; transition: opacity .55s ease; }
+.rate-end.on { opacity: 1; }
+/* the finished room, blurred, behind everything (like the client's end card) */
+.re-bg { position: absolute; inset: 0; background: rgba(66, 40, 34, .30);
+  -webkit-backdrop-filter: blur(22px) saturate(1.05); backdrop-filter: blur(22px) saturate(1.05); }
+.re-wrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: max(14px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom)); box-sizing: border-box; gap: calc(var(--fs) * .55); }
+.re-logo { width: var(--lw); height: auto; display: block; filter: drop-shadow(0 3px 10px rgba(40, 20, 20, .28));
+  opacity: 0; transform: translateY(-12px); transition: opacity .5s ease .15s, transform .5s ease .15s; }
+.re-card { position: relative; width: var(--c); height: var(--c); flex: 0 0 auto; margin-bottom: calc(var(--c) * .095);
+  opacity: 0; transform: scale(.86) rotate(-2.5deg); transition: opacity .55s ease .2s, transform .7s cubic-bezier(.2, 1.25, .4, 1) .2s; }
+.re-frame { position: absolute; inset: 0; border-radius: calc(var(--c) * .05); overflow: hidden; background: #fff;
+  border: max(5px, calc(var(--c) * .022)) solid #fff; box-sizing: border-box; box-shadow: 0 10px 30px rgba(40, 18, 14, .35); }
+.re-img, .re-clone { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.re-clone { left: 0 !important; top: 0 !important; transform: none !important; }
+.re-pill { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 52%) scale(.4); opacity: 0;
+  display: flex; align-items: center; gap: .3em; background: #fff; border-radius: 999px; padding: .26em .8em .3em .62em;
+  font-size: max(18px, calc(var(--c) * .075)); font-weight: 800; color: #3d2b2b; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(60, 30, 25, .25); transition: opacity .35s ease .85s, transform .5s cubic-bezier(.2, 1.6, .4, 1) .85s; }
+.re-star { width: 1.05em; height: 1.05em; display: block; }
+.re-star-t { color: #f5b729; }
+.re-q { letter-spacing: .02em; display: inline-block; }
+.rate-end.on .re-q { animation: reQ 1.6s ease-in-out 1.6s infinite; }
+@keyframes reQ { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+.re-spark { position: absolute; width: calc(var(--c) * .09); opacity: 0; pointer-events: none; }
+.re-spark.s1 { left: -3%; top: -4%; } .re-spark.s2 { right: -3%; top: 8%; } .re-spark.s3 { right: 4%; bottom: 10%; width: calc(var(--c) * .06); }
+.rate-end.on .re-spark { animation: reTw 1.8s ease-in-out infinite; }
+.rate-end.on .re-spark.s2 { animation-delay: .6s; } .rate-end.on .re-spark.s3 { animation-delay: 1.2s; }
+@keyframes reTw { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0); } 45% { opacity: 1; transform: scale(1) rotate(25deg); } }
+.re-side { display: flex; flex-direction: column; align-items: center; gap: calc(var(--fs) * .7); }
+.re-title { color: #fff; font-weight: 800; font-size: var(--fs); line-height: 1.12; text-align: center; text-transform: uppercase; letter-spacing: .01em;
+  max-width: min(92vw, 15em); text-shadow: 0 2px 10px rgba(50, 20, 15, .35);
+  opacity: 0; transform: translateY(14px); transition: opacity .5s ease 1.05s, transform .5s ease 1.05s; }
+.re-cta { opacity: 0; transform: translateY(14px); transition: opacity .5s ease 1.25s, transform .5s ease 1.25s; }
+.re-cta .cta-image { margin: 0 !important; --cta-fs: clamp(18px, calc(var(--fs) * .78), 30px) !important; animation: none; }
+.re-cta.on .cta-image { animation: ctaBeat 1.7s ease-in-out .4s infinite; }
+.re-cta.pressed .cta-image { transform: scale(.93); animation: none; }
+.rate-end.on .re-logo, .rate-end.on .re-title, .rate-end.on .re-cta { opacity: 1; transform: none; }
+.rate-end.on .re-card { opacity: 1; transform: rotate(-2.5deg); }
+.rate-end.on .re-pill { opacity: 1; transform: translate(-50%, 52%) rotate(2.5deg); }
+/* desktop and landscape: design on the left, the pitch on the right (like the client end card) */
+.rate-end.re-land .re-wrap { display: grid; grid-template-columns: var(--c) var(--side); grid-template-rows: auto auto; column-gap: max(32px, calc(var(--c) * .14)); row-gap: calc(var(--fs) * .9);
+  align-content: center; justify-content: center; }
+.rate-end.re-land .re-card { grid-column: 1; grid-row: 1 / span 2; align-self: center; margin-bottom: 0; }
+.rate-end.re-land .re-logo { grid-column: 2; grid-row: 1; align-self: end; justify-self: center; }
+.rate-end.re-land .re-side { grid-column: 2; grid-row: 2; align-self: start; }
+.rate-end.re-land .re-title { max-width: var(--side); }
+/* hand on Download (end screens) — fingertip at 37% / 10% of the hand art */
+.ec-hand { position: absolute; z-index: 120; width: clamp(56px, 7vmin, 92px); pointer-events: none; opacity: 0; transform: translate(-37%, -10%); transition: opacity .4s ease; }
+.ec-hand.on { opacity: 1; }
+.ec-hand img { display: block; width: 100%; animation: handTap .9s ease-in-out infinite; transform-origin: 37% 10%; }
+.early-cut .hot-wrap { pointer-events: none !important; }
+
+#finalScreen.ec-title-first .game-title { margin: 0 0 4px; }
+#finalScreen.ec-title-first .cta-image { margin-top: clamp(18px, 2.6vh, 44px); }
+
+/* 2026-11-12 review upgrades */
+.cheer-pop-pill::before { content: none !important; display: none !important; }
+.re-title { text-wrap: balance; max-width: min(92vw, 11.5em); }
+.re-pill { font-size: max(20px, calc(var(--c) * .092)); font-weight: 900; padding: .3em .95em .34em .72em; }
+#finalScreen.ec-title-first .game-title { text-transform: uppercase; font-weight: 800; font-size: clamp(22px, 4.4vmin, 54px); line-height: 1.1; letter-spacing: .01em; text-wrap: balance; max-width: 11em; margin: 0 auto 4px; }
